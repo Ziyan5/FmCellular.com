@@ -34,8 +34,8 @@ The live admin login must stay enabled until the staging admin login has passed 
 
 ## Configure the staging admin dashboard
 
-1. Copy `admin/config.example.js` to `admin/config.js`.
-2. Add the Supabase project URL and public anonymous key. Never place the service-role key in this file.
+1. The staging dashboard is connected to the existing Supabase project using its browser-safe anonymous key.
+2. Never place the service-role key in `admin/config.js` or any browser file.
 3. Serve the `admin/` directory from a staging-only URL.
 4. Sign in with the Supabase Auth account whose user ID was added to `public.admin_users`.
 5. Test product, variant, price, inventory, and image changes before connecting production.

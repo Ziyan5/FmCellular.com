@@ -1,0 +1,4 @@
+window.FM_ADMIN_CONFIG = {
+  supabaseUrl: "https://yvvfajvebdzxfnwutgyp.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2dmZhanZlYmR6eGZud3V0Z3lwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NDk2NjAsImV4cCI6MjEwNTUyNTY2MH0.1XebTgGZsi3D3hZEaH_mQ8G29ItlNI54RJhXL1CpLT4"
+};
