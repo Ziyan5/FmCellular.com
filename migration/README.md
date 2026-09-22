@@ -12,6 +12,7 @@ It intentionally excludes customer details, orders, wholesale login data, passwo
 - `tools/build_seed_sql.py` — idempotent normalized catalog seed builder.
 - `tools/generate_static_pages.py` — generates one SEO-ready HTML page per public product, plus a catalog index, sitemap, robots file, and shared styling.
 - `supabase/functions/feed/index.ts` — compatibility feed for the existing storefront.
+- `admin/` — staging admin dashboard for secured sign-in and catalog management.
 - `mapping.md` — source-to-database migration map and rollout order.
 - `requirements.txt` — Python dependency for the exporter.
 
@@ -30,6 +31,14 @@ It intentionally excludes customer details, orders, wholesale login data, passwo
 11. Switch `/api/feed` only after the comparison and admin checks pass.
 
 The live admin login must stay enabled until the staging admin login has passed these checks. This migration does not remove, overwrite, or redirect the existing login.
+
+## Configure the staging admin dashboard
+
+1. Copy `admin/config.example.js` to `admin/config.js`.
+2. Add the Supabase project URL and public anonymous key. Never place the service-role key in this file.
+3. Serve the `admin/` directory from a staging-only URL.
+4. Sign in with the Supabase Auth account whose user ID was added to `public.admin_users`.
+5. Test product, variant, price, inventory, and image changes before connecting production.
 
 ## Generate the static SEO catalog
 
