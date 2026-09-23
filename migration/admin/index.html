@@ -18,7 +18,7 @@
       <section class="auth-card" id="login-view">
         <p class="eyebrow">Authorized staff only</p>
         <h1>Admin sign in</h1>
-        <p class="muted">Use the admin account configured in Supabase. The public anonymous key is safe here; authorization is enforced by database policies.</p>
+        <p class="muted">Manage the FM Cellular catalog from one place. Access is enforced by Supabase authentication and database policies.</p>
         <form id="login-form">
           <label>Email<input id="email" type="email" autocomplete="username" required></label>
           <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
@@ -29,13 +29,20 @@
 
       <section id="dashboard-view" hidden>
         <div class="dashboard-head">
-          <div><p class="eyebrow">Catalog control</p><h1>Products and inventory</h1></div>
+          <div><p class="eyebrow">Catalog control</p><h1>Products and inventory</h1><p class="muted">Edit products, prices, inventory, images, colors, and wholesale data.</p></div>
           <button class="button primary" id="new-product" type="button">Add product</button>
+        </div>
+
+        <div class="stats-grid" aria-label="Catalog summary">
+          <div class="stat-card"><span>Products</span><strong id="stat-products">—</strong></div>
+          <div class="stat-card"><span>Variants</span><strong id="stat-variants">—</strong></div>
+          <div class="stat-card"><span>Low / no stock</span><strong id="stat-low-stock">—</strong></div>
+          <div class="stat-card"><span>Inactive products</span><strong id="stat-inactive">—</strong></div>
         </div>
 
         <div class="toolbar">
           <label class="search-label" for="search">Search products</label>
-          <input id="search" class="search" type="search" placeholder="Model, category, brand, or part">
+          <input id="search" class="search" type="search" placeholder="Search model, brand, category, or part">
           <select id="status-filter" aria-label="Product status"><option value="all">All products</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
         </div>
 
@@ -67,12 +74,17 @@
       </div>
 
       <section class="subpanel" id="variant-panel" hidden>
-        <div class="subpanel-head"><h3>Variants, pricing, and inventory</h3><button class="button ghost" id="add-variant" type="button">Add variant</button></div>
+        <div class="subpanel-head"><div><h3>Variants, pricing, and inventory</h3><p class="subtext">Retail, wholesale, quantity, availability, and low-stock alerts.</p></div><button class="button ghost" id="add-variant" type="button">Add variant</button></div>
         <div id="variant-list"></div>
       </section>
 
+      <section class="subpanel" id="finish-panel" hidden>
+        <div class="subpanel-head"><div><h3>Colors and finishes</h3><p class="subtext">Control color names, swatches, and optional finish-specific images.</p></div><button class="button ghost" id="add-finish" type="button">Add finish</button></div>
+        <div id="finish-list"></div>
+      </section>
+
       <section class="subpanel" id="image-panel" hidden>
-        <div class="subpanel-head"><h3>Product images</h3><button class="button ghost" id="add-image" type="button">Add image</button></div>
+        <div class="subpanel-head"><div><h3>Product images</h3><p class="subtext">Manage primary images and display order.</p></div><button class="button ghost" id="add-image" type="button">Add image</button></div>
         <div id="image-list"></div>
       </section>
 
@@ -90,10 +102,25 @@
       <label>Color<input data-field="color"></label>
       <label>Retail price<input data-field="retail_price" type="number" min="0" step="0.01"></label>
       <label>MSRP<input data-field="msrp" type="number" min="0" step="0.01"></label>
+      <label>Wholesale price<input data-field="wholesale_price" type="number" min="0" step="0.01"></label>
+      <label>Wholesale minimum qty<input data-field="minimum_quantity" type="number" min="1" step="1" value="1"></label>
       <label>Quantity<input data-field="quantity" type="number" min="0" step="1"></label>
+      <label>Low-stock alert at<input data-field="low_stock_threshold" type="number" min="0" step="1" value="2"></label>
       <label class="checkbox"><input data-field="available" type="checkbox"> Available</label>
       <label class="checkbox"><input data-field="is_active" type="checkbox" checked> Active</label>
       <button class="icon-button remove-record" type="button" aria-label="Remove variant">×</button>
+    </div>
+  </template>
+
+  <template id="finish-template">
+    <div class="record-card finish-row">
+      <input data-field="id" type="hidden">
+      <label>Color name<input data-field="color" required></label>
+      <label>Hex color<input data-field="hex_color" placeholder="#000000"></label>
+      <label class="wide">Finish image URL<input data-field="image_url" type="url"></label>
+      <label>Sort order<input data-field="sort_order" type="number" min="0" step="1" value="0"></label>
+      <label class="checkbox"><input data-field="is_hidden" type="checkbox"> Hide finish</label>
+      <button class="icon-button remove-record" type="button" aria-label="Remove finish">×</button>
     </div>
   </template>
 
