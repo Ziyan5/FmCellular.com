@@ -154,8 +154,6 @@ create policy "Public reads active products" on public.catalog_products
 for select using (is_active);
 create policy "Public reads active variants" on public.catalog_variants
 for select using (is_active);
-create policy "Public reads inventory availability" on public.inventory_levels
-for select using (true);
 create policy "Public reads product images" on public.product_images
 for select using (true);
 create policy "Public reads visible finishes" on public.product_finishes
@@ -180,6 +178,19 @@ create policy "Admins manage product finishes" on public.product_finishes
 for all to authenticated using (public.is_admin()) with check (public.is_admin());
 create policy "Admins manage content" on public.cms_content
 for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+-- Shoppers see in stock or not, never the count: inventory_levels is
+-- admin-only, and the public reads this view instead.
+create view public.variant_availability
+with (security_invoker = false) as
+  select v.id as variant_id,
+         coalesce(i.available, false) and (i.quantity is null or i.quantity > 0) as in_stock
+  from public.catalog_variants v
+  join public.catalog_products p on p.id = v.product_id
+  left join public.inventory_levels i on i.variant_id = v.id
+  where v.is_active and p.is_active;
+revoke all on public.variant_availability from public, anon, authenticated;
+grant select on public.variant_availability to anon, authenticated;
 
 -- No browser-facing policy is created for wholesale_prices.
 -- Trusted server code or a later approved-wholesaler policy must handle it.

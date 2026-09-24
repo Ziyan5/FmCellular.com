@@ -28,7 +28,7 @@ Deno.serve(async (request) => {
       await Promise.all([
         supabase
           .from("catalog_variants")
-          .select("id,storage,condition,color,retail_price,msrp,is_active,catalog_products!inner(item_type,category,model,part_name,is_active),inventory_levels(quantity,available),wholesale_prices(price),product_images(url,is_primary,sort_order)")
+          .select("id,storage,condition,color,retail_price,msrp,is_active,catalog_products!inner(item_type,category,model,part_name,is_active),inventory_levels(quantity,available),product_images(url,is_primary,sort_order)")
           .eq("is_active", true)
           .eq("catalog_products.is_active", true),
         supabase
@@ -49,7 +49,6 @@ Deno.serve(async (request) => {
     const rows = (variants || []).map((variant: any) => {
       const product = variant.catalog_products;
       const inventory = Array.isArray(variant.inventory_levels) ? variant.inventory_levels[0] : variant.inventory_levels;
-      const wholesale = Array.isArray(variant.wholesale_prices) ? variant.wholesale_prices[0] : variant.wholesale_prices;
       const images = (variant.product_images || []).slice().sort((a: any, b: any) =>
         Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)) || (a.sort_order || 0) - (b.sort_order || 0)
       );
@@ -61,10 +60,9 @@ Deno.serve(async (request) => {
         color: variant.color || "",
         part: product.part_name || "",
         price: variant.retail_price,
-        wholesale: wholesale?.price ?? null,
         msrp: variant.msrp,
-        qty: inventory?.quantity ?? null,
-        in_stock: Boolean(inventory?.available),
+        // Public feed: a yes/no only. Counts and trade prices never leave the database.
+        in_stock: Boolean(inventory?.available) && (inventory?.quantity == null || inventory.quantity > 0),
         image_url: images[0]?.url || "",
         notes: "",
         item_type: product.item_type,
