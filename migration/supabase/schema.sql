@@ -57,6 +57,7 @@ create table public.catalog_variants (
   retail_price numeric(12,2) check (retail_price is null or retail_price >= 0),
   msrp numeric(12,2) check (msrp is null or msrp >= 0),
   in_stock boolean not null default false, -- kept in step with inventory_levels by 002
+  sort_order integer,                      -- the sheet's order; null (added later) sorts first
   is_active boolean not null default true,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),

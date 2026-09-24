@@ -102,6 +102,7 @@ async function build(data: any) {
         storage, condition, color,
         retail_price: money(r.price), msrp: money(r.msrp),
         is_active: true,
+        sort_order: variants.length + 1,   // the sheet's own order
         metadata: { source, notes: text(r.notes) || undefined },
         _qty: qty,
         _available: text(r.in_stock).toLowerCase() !== "no" && (qty === null || qty > 0),
@@ -132,11 +133,16 @@ async function build(data: any) {
     });
   }
 
+  // Most of the Site text tab is the page's own wording as it was first
+  // seeded, and some of that is out of date now. Only real edits - the ones
+  // the sheet's own feed sends - are switched on.
+  const overrides = data.contentOverrides || {};
   const content = (data.content || [])
     .filter((c: any) => text(c.key))
     .map((c: any) => ({
       content_key: text(c.key), page: text(c.page) || "index.html", element: text(c.element) || "p",
-      text_value: text(c.text) || null, is_active: text(c.text) !== "",
+      text_value: text(c.text) || null,
+      is_active: Object.prototype.hasOwnProperty.call(overrides, text(c.key)),
     }));
   const strip = (rows: any[]) => rows.map(({ _row, ...rest }) => rest);
   content.push({ content_key: "sheet:posters", page: "fm-parts.html", element: "config",
