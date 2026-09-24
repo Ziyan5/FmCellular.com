@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>FM Cellular Admin — Reset password</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="FM Cellular home">FM Cellular <span>Admin</span></a>
+    </header>
+
+    <main>
+      <section class="auth-card" id="recovery-view">
+        <p class="eyebrow">Authorized staff only</p>
+        <h1>Set a new password</h1>
+        <p class="muted" id="recovery-intro">Verifying your recovery link…</p>
+        <form id="recovery-form" hidden>
+          <label>New password<input id="new-password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label>Confirm new password<input id="confirm-password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <button class="button primary" type="submit">Update password</button>
+          <p class="message" id="recovery-form-message" role="status"></p>
+        </form>
+        <p class="muted"><a href="/">Back to sign in</a></p>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="recovery.js"></script>
+</body>
+</html>

@@ -25,6 +25,13 @@
           <button class="button primary" type="submit">Sign in</button>
           <p class="message" id="login-message" role="status"></p>
         </form>
+        <button class="button ghost" id="forgot-password" type="button">Forgot password?</button>
+        <form id="recovery-request-form" hidden>
+          <label>Email<input id="recovery-email" type="email" autocomplete="username" required></label>
+          <button class="button primary" type="submit">Send reset link</button>
+          <button class="button ghost" id="cancel-recovery" type="button">Cancel</button>
+          <p class="message" id="recovery-message" role="status"></p>
+        </form>
       </section>
 
       <section id="dashboard-view" hidden>

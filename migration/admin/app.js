@@ -359,6 +359,34 @@
     setSignedOut();
   });
 
+  $("#forgot-password").addEventListener("click", () => {
+    $("#recovery-email").value = $("#email").value;
+    message($("#recovery-message"));
+    $("#login-form").hidden = true;
+    $("#forgot-password").hidden = true;
+    $("#recovery-request-form").hidden = false;
+  });
+
+  $("#cancel-recovery").addEventListener("click", () => {
+    $("#recovery-request-form").hidden = true;
+    $("#login-form").hidden = false;
+    $("#forgot-password").hidden = false;
+  });
+
+  $("#recovery-request-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!client) {
+      return message($("#recovery-message"), "Admin configuration is missing.", "error");
+    }
+    const button = $("#recovery-request-form").querySelector("button[type=submit]");
+    button.disabled = true;
+    await client.auth.resetPasswordForEmail($("#recovery-email").value.trim(), {
+      redirectTo: `${window.location.origin}/recovery.html`
+    });
+    button.disabled = false;
+    message($("#recovery-message"), "If that email has an admin account, a reset link has been sent.", "success");
+  });
+
   $("#search").addEventListener("input", event => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
