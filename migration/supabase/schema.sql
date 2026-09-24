@@ -56,6 +56,7 @@ create table public.catalog_variants (
   color text,
   retail_price numeric(12,2) check (retail_price is null or retail_price >= 0),
   msrp numeric(12,2) check (msrp is null or msrp >= 0),
+  in_stock boolean not null default false, -- kept in step with inventory_levels by 002
   is_active boolean not null default true,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -178,19 +179,6 @@ create policy "Admins manage product finishes" on public.product_finishes
 for all to authenticated using (public.is_admin()) with check (public.is_admin());
 create policy "Admins manage content" on public.cms_content
 for all to authenticated using (public.is_admin()) with check (public.is_admin());
-
--- Shoppers see in stock or not, never the count: inventory_levels is
--- admin-only, and the public reads this view instead.
-create view public.variant_availability
-with (security_invoker = false) as
-  select v.id as variant_id,
-         coalesce(i.available, false) and (i.quantity is null or i.quantity > 0) as in_stock
-  from public.catalog_variants v
-  join public.catalog_products p on p.id = v.product_id
-  left join public.inventory_levels i on i.variant_id = v.id
-  where v.is_active and p.is_active;
-revoke all on public.variant_availability from public, anon, authenticated;
-grant select on public.variant_availability to anon, authenticated;
 
 -- No browser-facing policy is created for wholesale_prices.
 -- Trusted server code or a later approved-wholesaler policy must handle it.

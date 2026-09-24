@@ -2,26 +2,42 @@
 --
 -- Before this, the "Public reads inventory availability" policy let anyone
 -- holding the public anon key read inventory_levels in full, quantity
--- included. The table is now admin-only, and the public reads this view,
--- which carries a single yes/no per active variant.
---
--- The view runs as its owner (security_invoker off) so it can see the
--- inventory rows the public no longer can; it exposes nothing but the flag.
+-- included. The table is now admin-only. The yes/no lives on the variant as
+-- in_stock, which the public can already read, and a trigger keeps it in
+-- step with inventory_levels - so no view has to run with raised rights.
 
 begin;
 
 drop policy if exists "Public reads inventory availability" on public.inventory_levels;
+drop view if exists public.variant_availability;
 
-create or replace view public.variant_availability
-with (security_invoker = false) as
-  select v.id as variant_id,
-         coalesce(i.available, false) and (i.quantity is null or i.quantity > 0) as in_stock
-  from public.catalog_variants v
-  join public.catalog_products p on p.id = v.product_id
-  left join public.inventory_levels i on i.variant_id = v.id
-  where v.is_active and p.is_active;
+alter table public.catalog_variants add column if not exists in_stock boolean not null default false;
 
-revoke all on public.variant_availability from public, anon, authenticated;
-grant select on public.variant_availability to anon, authenticated;
+create or replace function public.sync_variant_in_stock()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    update public.catalog_variants set in_stock = false where id = old.variant_id;
+    return old;
+  end if;
+  update public.catalog_variants
+     set in_stock = coalesce(new.available, false) and (new.quantity is null or new.quantity > 0)
+   where id = new.variant_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists inventory_levels_sync_in_stock on public.inventory_levels;
+create trigger inventory_levels_sync_in_stock
+after insert or update or delete on public.inventory_levels
+for each row execute function public.sync_variant_in_stock();
+
+update public.catalog_variants v
+   set in_stock = coalesce(i.available, false) and (i.quantity is null or i.quantity > 0)
+  from public.inventory_levels i
+ where i.variant_id = v.id;
 
 commit;
