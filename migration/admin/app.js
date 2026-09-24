@@ -136,8 +136,20 @@
     return row;
   }
 
+  function relabel(record, field, text) {
+    const input = record.querySelector(`[data-field="${field}"]`);
+    if (input && input.parentNode.firstChild.nodeType === Node.TEXT_NODE) input.parentNode.firstChild.textContent = text;
+  }
+
   function addRecord(template, container, values = {}) {
     const record = template.content.firstElementChild.cloneNode(true);
+    // Parts keep the spreadsheet's layout, which the parts page reads: the
+    // listing a customer picks sits in storage and the device family in
+    // condition. Name the boxes for what they hold rather than move the data.
+    if (record.classList.contains("variant-row") && $("#item-type").value === "part") {
+      relabel(record, "storage", "Listing (what the customer picks)");
+      relabel(record, "condition", "Fits (iPhone, Samsung, ...)");
+    }
     record.querySelectorAll("[data-field]").forEach(input => {
       const value = values[input.dataset.field];
       if (input.type === "checkbox") input.checked = Boolean(value);
