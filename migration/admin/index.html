@@ -37,9 +37,11 @@
       <section id="dashboard-view" hidden>
         <div class="dashboard-head">
           <div><p class="eyebrow">Catalog control</p><h1>Products and inventory</h1><p class="muted">Edit products, prices, inventory, images, colors, and wholesale data.</p></div>
-          <button class="button primary" id="new-product" type="button">Add product</button>
+          <div class="head-actions"><button class="button ghost" id="sync-sheet" type="button" title="Replace the catalogue here with the Google Sheet. Only before the switch.">Copy from Google Sheet</button>
+          <button class="button primary" id="new-product" type="button">Add product</button></div>
         </div>
 
+        <p class="message" id="sync-message" role="status"></p>
         <div class="stats-grid" aria-label="Catalog summary">
           <div class="stat-card"><span>Products</span><strong id="stat-products">—</strong></div>
           <div class="stat-card"><span>Variants</span><strong id="stat-variants">—</strong></div>

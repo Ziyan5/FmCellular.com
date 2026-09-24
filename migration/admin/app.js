@@ -509,6 +509,42 @@
   });
 
   $("#new-product").addEventListener("click", () => openProduct());
+
+  // Before the switch the sheet is still where prices are typed, so the
+  // catalogue here is refreshed from it. Counts first; nothing is replaced
+  // until the second confirmation. After the switch this must not be used:
+  // it would throw away every edit made here.
+  $("#sync-sheet").addEventListener("click", async () => {
+    const out = $("#sync-message");
+    const button = $("#sync-sheet");
+    const call = body => client.functions.invoke("sync-from-sheet", { body });
+    button.disabled = true;
+    try {
+      message(out, "Reading the Google Sheet...");
+      const dry = await call({});
+      if (dry.error || !dry.data?.ok) throw new Error(dry.data?.error || dry.error?.message || "The sheet could not be read.");
+      const d = dry.data;
+      const summary = `${d.products} products, ${d.variants} variants (${d.priced} priced, ${d.wholesale} with a trade price), ${d.finishes} colours, ${d.content} pieces of wording`;
+      if (!confirm(`Replace everything here with the sheet?
+
+${summary}
+
+Edits made in this admin since the last copy will be lost.`)) {
+        message(out, "Nothing changed. The sheet has " + summary + ".");
+        return;
+      }
+      message(out, "Copying... this takes up to a minute.");
+      const run = await call({ confirm: "replace-all" });
+      if (run.error || !run.data?.ok) throw new Error(run.data?.error || run.error?.message || "The copy failed.");
+      message(out, "Copied from the sheet: " + summary + ".", "success");
+      state.page = 0;
+      await Promise.all([loadStats(), loadProducts()]);
+    } catch (error) {
+      message(out, error.message, "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
   $("#close-dialog").addEventListener("click", () => dialog.close());
   $("#cancel-dialog").addEventListener("click", () => dialog.close());
   $("#add-variant").addEventListener("click", () => addRecord($("#variant-template"), $("#variant-list"), {

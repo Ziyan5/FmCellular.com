@@ -3,3 +3,4 @@
 [hidden]{display:none!important}
 /* A variant switched off with its remove button: still here, clearly out of the shop. */
 .record-card.deactivated{opacity:.55;outline:1px dashed var(--line,#c9ced6);outline-offset:-1px}
+.head-actions{display:flex;gap:10px;flex-wrap:wrap}
