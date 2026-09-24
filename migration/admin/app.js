@@ -463,7 +463,7 @@
     const button = $("#recovery-request-form").querySelector("button[type=submit]");
     button.disabled = true;
     await client.auth.resetPasswordForEmail($("#recovery-email").value.trim(), {
-      redirectTo: `${window.location.origin}/recovery.html`
+      redirectTo: `${window.location.origin}/recovery`
     });
     button.disabled = false;
     message($("#recovery-message"), "If that email has an admin account, a reset link has been sent.", "success");

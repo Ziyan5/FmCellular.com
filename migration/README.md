@@ -39,7 +39,7 @@ The live admin login must stay enabled until the staging admin login has passed 
 3. Serve the `admin/` directory from a staging-only URL.
 4. Sign in with the Supabase Auth account whose user ID was added to `public.admin_users`.
 5. Test product, variant, price, inventory, and image changes before connecting production.
-6. Password recovery: in the Supabase dashboard, under Authentication → URL Configuration, add `https://<staging-domain>/recovery.html` to the allowed Redirect URLs (and the equivalent for the production domain once it is used there too). Without this, "Forgot password?" emails will link to a page Supabase refuses to redirect to.
+6. Password recovery: in the Supabase dashboard, under Authentication → URL Configuration, add `https://<staging-domain>/recovery` to the allowed Redirect URLs (Cloudflare Pages serves recovery.html at /recovery) (and the equivalent for the production domain once it is used there too). Without this, "Forgot password?" emails will link to a page Supabase refuses to redirect to.
 
 ## Generate the static SEO catalog
 
