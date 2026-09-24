@@ -168,7 +168,8 @@ Deno.serve(async (request) => {
   const { data: isAdmin, error: adminError } = await caller.rpc("is_admin");
   if (adminError || isAdmin !== true) return json({ ok: false, error: "Only a signed-in admin can do this." }, 403);
 
-  const key = Deno.env.get("LIBRARY_IMPORT_KEY");
+  // Trimmed: a key pasted from the text file easily brings its line break along.
+  const key = (Deno.env.get("LIBRARY_IMPORT_KEY") || "").trim();
   if (!key) return json({ ok: false, error: "LIBRARY_IMPORT_KEY is not set in this function's secrets." }, 500);
 
   let body: any = {};
@@ -176,13 +177,21 @@ Deno.serve(async (request) => {
   const apply = body.confirm === "replace-all";
 
   try {
-    const res = await fetch(EXPORT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "exportForMigration", key }),
-    });
-    const data = await res.json();
-    if (!data.ok) return json({ ok: false, error: "The sheet export failed: " + (data.error || res.status) }, 502);
+    // Google now and then answers with an error page instead of data; one
+    // more try is usually enough.
+    let data: any = null, lastError = "";
+    for (let attempt = 1; attempt <= 3 && !data; attempt++) {
+      const res = await fetch(EXPORT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "exportForMigration", key }),
+      });
+      const raw = await res.text();
+      try { data = JSON.parse(raw); } catch { lastError = "Google answered with a page, not data (HTTP " + res.status + ")"; }
+      if (!data) await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+    if (!data) return json({ ok: false, error: "The sheet export failed: " + lastError }, 502);
+    if (!data.ok) return json({ ok: false, error: "The sheet export failed: " + (data.error || "no reason given") }, 502);
 
     const built = await build(data);
     const summary = {
