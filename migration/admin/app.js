@@ -14,7 +14,6 @@
     query: "",
     status: "all",
     editingId: null,
-    removedVariantIds: [],
     removedImageIds: [],
     removedFinishIds: []
   };
@@ -59,19 +58,40 @@
     return true;
   }
 
+  // Supabase answers any unranged request with at most 1,000 rows, and the
+  // catalog has close to 9,000 inventory rows - so asking for "all of them"
+  // quietly counted only the first thousand. Page through instead, and only
+  // through rows that have a quantity at all, since a blank count cannot be
+  // low. Two columns cannot be compared in a PostgREST filter, which is why
+  // the comparison still happens here.
+  async function countLowStock() {
+    const pageSize = 1000;
+    let low = 0;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await client.from("inventory_levels")
+        .select("quantity,low_stock_threshold")
+        .not("quantity", "is", null)
+        .order("variant_id")
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      low += data.filter(row => row.quantity <= row.low_stock_threshold).length;
+      if (data.length < pageSize) return low;
+    }
+  }
+
   async function loadStats() {
-    const [products, variants, inactive, inventory] = await Promise.all([
+    const [products, variants, inactive] = await Promise.all([
       client.from("catalog_products").select("*", { count: "exact", head: true }),
       client.from("catalog_variants").select("*", { count: "exact", head: true }),
-      client.from("catalog_products").select("*", { count: "exact", head: true }).eq("is_active", false),
-      client.from("inventory_levels").select("quantity,low_stock_threshold")
+      client.from("catalog_products").select("*", { count: "exact", head: true }).eq("is_active", false)
     ]);
     if (!products.error) $("#stat-products").textContent = (products.count || 0).toLocaleString();
     if (!variants.error) $("#stat-variants").textContent = (variants.count || 0).toLocaleString();
     if (!inactive.error) $("#stat-inactive").textContent = (inactive.count || 0).toLocaleString();
-    if (!inventory.error) {
-      const low = (inventory.data || []).filter(row => row.quantity !== null && row.quantity <= row.low_stock_threshold).length;
-      $("#stat-low-stock").textContent = low.toLocaleString();
+    try {
+      $("#stat-low-stock").textContent = (await countLowStock()).toLocaleString();
+    } catch (error) {
+      $("#stat-low-stock").textContent = "—";
     }
   }
 
@@ -126,11 +146,25 @@
 
     record.querySelector(".remove-record").addEventListener("click", () => {
       const id = record.querySelector('[data-field="id"]').value;
-      if (id) {
-        if (record.classList.contains("variant-row")) state.removedVariantIds.push(id);
-        else if (record.classList.contains("finish-row")) state.removedFinishIds.push(id);
-        else state.removedImageIds.push(id);
+      if (!id) {                       // never saved, so nothing to undo
+        record.remove();
+        return;
       }
+      // A saved variant is switched off, not deleted. Deleting it cascades in
+      // the database and takes its stock count, wholesale price and any
+      // images tied to it along with it, with no way back. Unticking Active
+      // hides it from the shop and keeps all of that.
+      if (record.classList.contains("variant-row")) {
+        const active = record.querySelector('[data-field="is_active"]');
+        active.checked = false;
+        record.classList.add("deactivated");
+        message($("#form-message"), "Variant set to inactive. Save to hide it from the catalog - its stock and prices are kept.");
+        return;
+      }
+      const what = record.classList.contains("finish-row") ? "color/finish" : "image";
+      if (!confirm(`Remove this ${what} permanently when you save? This cannot be undone.`)) return;
+      if (record.classList.contains("finish-row")) state.removedFinishIds.push(id);
+      else state.removedImageIds.push(id);
       record.remove();
     });
     container.append(record);
@@ -145,7 +179,6 @@
     $("#image-list").replaceChildren();
     $("#finish-list").replaceChildren();
     state.editingId = null;
-    state.removedVariantIds = [];
     state.removedImageIds = [];
     state.removedFinishIds = [];
     message($("#form-message"));
@@ -220,11 +253,56 @@
     return values;
   }
 
+  // Everything that can be checked without the database, checked before the
+  // first write. A save is several separate requests, so a failure part-way
+  // leaves the earlier ones in place; catching the usual causes up front -
+  // a SKU used twice, the same color twice, two primary images, a negative
+  // price - means those never start a half-finished save.
+  function validateForm() {
+    const problems = [];
+    const seen = (list, label) => {
+      const counts = {}, shown = {};
+      list.filter(Boolean).forEach(v => {
+        const k = v.toLowerCase();
+        counts[k] = (counts[k] || 0) + 1;
+        if (!shown[k]) shown[k] = v;          // report it the way it was typed
+      });
+      Object.keys(counts).filter(k => counts[k] > 1).forEach(k => problems.push(`${label} "${shown[k]}" is used more than once.`));
+    };
+    const numbers = ["retail_price", "msrp", "wholesale_price", "quantity", "minimum_quantity", "low_stock_threshold", "sort_order"];
+    const records = [...$("#variant-list").children, ...$("#finish-list").children, ...$("#image-list").children];
+    for (const record of records) {
+      const values = recordValues(record);
+      for (const field of numbers) {
+        if (!(field in values) || values[field] === null) continue;
+        if (Number.isNaN(values[field])) problems.push(`"${field.replace(/_/g, " ")}" must be a number.`);
+        else if (values[field] < 0) problems.push(`"${field.replace(/_/g, " ")}" cannot be negative.`);
+      }
+    }
+    const variants = [...$("#variant-list").children].map(recordValues);
+    seen(variants.map(v => v.sku), "SKU");
+    variants.filter(v => v.minimum_quantity !== null && v.minimum_quantity < 1)
+      .forEach(v => problems.push(`Wholesale minimum for ${v.sku || "a variant"} must be at least 1.`));
+    seen([...$("#finish-list").children].map(r => recordValues(r).color), "Color");
+    const images = [...$("#image-list").children].map(recordValues);
+    seen(images.map(i => i.url), "Image URL");
+    if (images.filter(i => i.is_primary).length > 1) problems.push("Only one image can be the primary image.");
+    return [...new Set(problems)];
+  }
+
   async function saveProduct(event) {
     event.preventDefault();
+    const problems = validateForm();
+    if (problems.length) return message($("#form-message"), problems.join(" "), "error");
+
     const button = $("#save-product");
     button.disabled = true;
     message($("#form-message"), "Saving…");
+
+    // Once a new row exists in the database, its id goes back into the form.
+    // If a later step fails and the user presses Save again, that row is then
+    // updated instead of being inserted a second time.
+    const remember = (record, id) => { record.querySelector('[data-field="id"]').value = id; };
 
     try {
       const product = {
@@ -246,6 +324,8 @@
         const { data, error } = await client.from("catalog_products").insert(product).select("id").single();
         if (error) throw error;
         productId = data.id;
+        state.editingId = productId;
+        $("#product-id").value = productId;
       }
 
       for (const record of $("#variant-list").children) {
@@ -274,6 +354,7 @@
 
         if (result.error) throw result.error;
         const variantId = id || result.data.id;
+        if (!id) remember(record, variantId);
 
         const inventoryResult = await client.from("inventory_levels").upsert(
           { variant_id: variantId, ...inventory },
@@ -300,8 +381,9 @@
         values.product_id = productId;
         const result = id
           ? await client.from("product_finishes").update(values).eq("id", id)
-          : await client.from("product_finishes").insert(values);
+          : await client.from("product_finishes").insert(values).select("id").single();
         if (result.error) throw result.error;
+        if (!id) remember(record, result.data.id);
       }
 
       for (const record of $("#image-list").children) {
@@ -311,21 +393,21 @@
         values.product_id = productId;
         const result = id
           ? await client.from("product_images").update(values).eq("id", id)
-          : await client.from("product_images").insert(values);
+          : await client.from("product_images").insert(values).select("id").single();
         if (result.error) throw result.error;
+        if (!id) remember(record, result.data.id);
       }
 
-      if (state.removedVariantIds.length) {
-        const { error } = await client.from("catalog_variants").delete().in("id", state.removedVariantIds);
-        if (error) throw error;
-      }
+      // Variants are never deleted from here - see the remove button.
       if (state.removedFinishIds.length) {
         const { error } = await client.from("product_finishes").delete().in("id", state.removedFinishIds);
         if (error) throw error;
+        state.removedFinishIds = [];
       }
       if (state.removedImageIds.length) {
         const { error } = await client.from("product_images").delete().in("id", state.removedImageIds);
         if (error) throw error;
+        state.removedImageIds = [];
       }
 
       message($("#form-message"), "Saved successfully.", "success");
