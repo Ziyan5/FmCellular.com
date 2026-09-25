@@ -54,13 +54,14 @@ export async function renderDevices(params) {
 function card(p) {
   const badges = [];
   if (!p.active) badges.push('<span class="pill plain">Hidden</span>');
-  if (p.unpriced) badges.push('<span class="pill warn">' + p.unpriced + " without price</span>");
+  if (p.options && p.unpriced === p.options) badges.push('<span class="pill warn">No prices yet</span>');
   const price = p.from === null ? '<span class="muted">No prices yet</span>' :
     (p.from === p.to ? money(p.from) : "from " + money(p.from));
   return '<a class="card pcard' + (p.active ? "" : " off") + '" href="#/product/' + p.id + '">' +
     '<div class="shot">' + (p.photo ? '<img loading="lazy" alt="" src="' + esc(photoSrc(p.photo)) + '">' : PLACEHOLDER) +
     '<div class="badges">' + badges.join("") + "</div></div>" +
     '<div class="info"><b>' + esc(p.model) + "</b><small>" + esc(p.category) + " · " + p.options + " option" + (p.options === 1 ? "" : "s") +
+    (p.unpriced && p.unpriced < p.options ? " · " + p.unpriced + " need a price" : "") +
     '</small><span class="price num">' + price + "</span></div></a>";
 }
 

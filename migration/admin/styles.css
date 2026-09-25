@@ -241,11 +241,11 @@ body.dragging-files .page-drop{display:grid}
 .poster.drop-before{box-shadow:-4px 0 0 var(--accent),var(--shadow)}
 .poster-prev{aspect-ratio:16/7;position:relative;overflow:hidden;display:flex;align-items:center;padding:18px 22px;cursor:grab}
 .poster-prev img.full{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.poster-prev .ptext{position:relative;z-index:2;max-width:58%;display:grid;gap:4px}
+.poster-prev .ptext{position:relative;z-index:4;max-width:52%;display:grid;gap:4px}
 .poster-prev .ptext small{font-size:.66rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-2)}
 .poster-prev .ptext b{font-size:1.05rem;line-height:1.15;font-weight:800;color:var(--ink)}
 .poster-prev .ptext b em{font-style:normal;color:var(--accent-2)}
-.poster-prev .pshot{position:absolute;bottom:-12%;height:115%;width:auto;object-fit:contain;pointer-events:none}
+.poster-prev .pshot{position:absolute;bottom:-4%;height:96%;width:38%;object-fit:contain;object-position:bottom;pointer-events:none}
 .poster.off .poster-prev{filter:grayscale(.8);opacity:.55}
 .poster-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
 .poster-foot .order{color:var(--muted);font-weight:700;font-size:.85rem}

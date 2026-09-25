@@ -12,6 +12,14 @@ export const sb = configured
 
 export const me = { id: null, email: "", name: "", role: "staff" };
 
+// An update the database refused returns no rows rather than an error, so
+// every write asks for its rows back and treats none as a refusal.
+function wrote(res) {
+  if (res.error) throw new Error(res.error.message);
+  if (!res.data || (Array.isArray(res.data) && !res.data.length)) throw new Error("The change was not accepted. Sign out and back in, then try again.");
+  return res.data;
+}
+
 function check({ data, error, count }) {
   if (error) throw new Error(error.message);
   return count !== undefined && count !== null ? { data, count } : data;
@@ -127,23 +135,23 @@ export async function getProduct(id) {
 // Saves a product page: the product switch, every changed option, and the
 // colours. `changes` is what the page collected; nothing unchanged is sent.
 export async function saveProduct(productId, { product, options, newOptions, finishes, images }) {
-  if (product) check(await sb.from("catalog_products").update(product).eq("id", productId));
+  if (product) wrote(await sb.from("catalog_products").update(product).eq("id", productId).select("id"));
 
   for (const o of options || []) {
     const v = {};
     ["storage", "condition", "color"].forEach((k) => { if (k in o.set) v[k] = o.set[k] || null; });
     if ("price" in o.set) v.retail_price = o.set.price;
     if ("active" in o.set) v.is_active = o.set.active;
-    if (Object.keys(v).length) check(await sb.from("catalog_variants").update(v).eq("id", o.id));
+    if (Object.keys(v).length) wrote(await sb.from("catalog_variants").update(v).eq("id", o.id).select("id"));
     if ("qty" in o.set || "available" in o.set) {
       const inv = { variant_id: o.id };
       if ("qty" in o.set) inv.quantity = o.set.qty;
       if ("available" in o.set) inv.available = o.set.available;
-      check(await sb.from("inventory_levels").upsert(inv, { onConflict: "variant_id" }));
+      wrote(await sb.from("inventory_levels").upsert(inv, { onConflict: "variant_id" }).select("variant_id"));
     }
     if ("trade" in o.set) {
       if (o.set.trade === null) check(await sb.from("wholesale_prices").delete().eq("variant_id", o.id));
-      else check(await sb.from("wholesale_prices").upsert({ variant_id: o.id, price: o.set.trade }, { onConflict: "variant_id" }));
+      else wrote(await sb.from("wholesale_prices").upsert({ variant_id: o.id, price: o.set.trade }, { onConflict: "variant_id" }).select("variant_id"));
     }
   }
 
@@ -167,13 +175,13 @@ export async function saveProduct(productId, { product, options, newOptions, fin
       product_id: productId, color: f.color.trim(), hex_color: f.hex || null,
       image_url: f.photos[0] || null, extra_urls: f.photos.slice(1), sort_order: i + 1, is_hidden: !!f.hidden
     }));
-    if (rows.length) check(await sb.from("product_finishes").upsert(rows, { onConflict: "product_id,color" }));
+    if (rows.length) wrote(await sb.from("product_finishes").upsert(rows, { onConflict: "product_id,color" }).select("id"));
   }
 
   if (images) {
     check(await sb.from("product_images").delete().eq("product_id", productId).is("variant_id", null));
     const rows = images.map((url, i) => ({ product_id: productId, url, sort_order: i, is_primary: i === 0 }));
-    if (rows.length) check(await sb.from("product_images").upsert(rows, { onConflict: "product_id,url" }));
+    if (rows.length) wrote(await sb.from("product_images").upsert(rows, { onConflict: "product_id,url" }).select("id"));
   }
 }
 
@@ -193,10 +201,10 @@ export async function listPosters() {
   return check(await sb.from("posters").select("*").order("sort_order"));
 }
 export async function savePosterOrder(ids) {
-  for (let i = 0; i < ids.length; i++) check(await sb.from("posters").update({ sort_order: i + 1 }).eq("id", ids[i]));
+  for (let i = 0; i < ids.length; i++) wrote(await sb.from("posters").update({ sort_order: i + 1 }).eq("id", ids[i]).select("id"));
 }
 export async function updatePoster(id, set) {
-  check(await sb.from("posters").update(set).eq("id", id));
+  wrote(await sb.from("posters").update(set).eq("id", id).select("id"));
 }
 export async function addPoster(row) {
   return check(await sb.from("posters").insert(row).select("*").single());

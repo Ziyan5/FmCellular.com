@@ -25,7 +25,7 @@ export async function renderPosters() {
     return '<div class="poster-prev" style="background:' + esc(c.tint || "#eef1f7") + '">' +
       '<div class="ptext">' + (c.kick ? "<small>" + esc(c.kick) + "</small>" : "") + "<b>" + safeHeadline(c.head) + "</b>" +
       (c.cta && c.cta.t ? '<span class="muted" style="font-size:.8rem;font-weight:700">' + esc(c.cta.t) + " →</span>" : "") + "</div>" +
-      shots.map((s, i) => '<img class="pshot" alt="" style="right:' + (i ? "2%" : "22%") + ";z-index:" + (i + 1) + '" src="' +
+      shots.map((s, i) => '<img class="pshot" alt="" style="right:' + (i ? "0%" : "14%") + ";z-index:" + (i + 1) + '" src="' +
         esc(SITE + "phone-images/transparent/" + encodeURI(String(s.f).replace(/\.png$/i, ".webp"))) + '">').join("") + "</div>";
   }
   function draw() {
