@@ -6,6 +6,7 @@ import { getProduct, saveProduct, log, upload } from "../db.js";
 import { $, $$, esc, money, photoSrc, toast, modal, confirmBox, readNumber, PLACEHOLDER } from "../ui.js";
 import { coloursFor, builtinHex, preparePhoto, acceptFiles, pickFiles, sortable, move } from "../photos.js";
 import { setLeaveCheck } from "../main.js";
+import { mirrorSoon } from "../mirror.js";
 
 const GRIP = '<svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
 const PLUS = '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
@@ -421,6 +422,7 @@ export async function renderProduct(id) {
       if (st.active !== p.is_active) bits.push(st.active ? "put back on the site" : "hidden from the site");
       await log("updated", p.model + (p.part_name ? " — " + p.part_name : ""), { productId: p.id, summary: bits.join(", "), lines: lines.slice(0, 40) });
       setLeaveCheck(null);
+      if (options.length || newOptions.length || st.active !== p.is_active) mirrorSoon();
       toast("Saved. The website updates within about a minute.", "good");
       renderProduct(id);
     } catch (err) {

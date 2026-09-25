@@ -7,6 +7,7 @@ import { renderDevices, renderParts } from "./views/products.js";
 import { renderProduct } from "./views/product.js";
 import { renderPosters } from "./views/posters.js";
 import { renderActivity } from "./views/activity.js";
+import { renderTeam } from "./views/team.js";
 
 /* ---------- unsaved work guard ----------
    A page with unsaved edits registers a check; leaving asks first. */
@@ -21,7 +22,8 @@ const routes = [
   [/^#\/parts(?:\?(.*))?$/, "parts", (m) => renderParts(new URLSearchParams(m[1] || ""))],
   [/^#\/product\/([0-9a-f-]{36})$/, null, (m) => renderProduct(m[1])],
   [/^#\/posters$/, "posters", () => renderPosters()],
-  [/^#\/activity$/, "activity", () => renderActivity()]
+  [/^#\/activity$/, "activity", () => renderActivity()],
+  [/^#\/team$/, "team", () => renderTeam()]
 ];
 let lastHash = location.hash;
 async function route() {
