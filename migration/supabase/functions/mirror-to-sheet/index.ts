@@ -86,15 +86,23 @@ Deno.serve(async (request) => {
       });
     }
 
-    let result: any = null, raw = "";
+    // Apps Script answers a POST with a redirect to its result. Followed
+    // automatically, a big POST can come back as the public GET feed instead,
+    // so the redirect is followed here, by hand, and the answer checked.
+    let result: any = null;
+    const payload = JSON.stringify({ action: "mirrorFromSupabase", key, dry: body.apply !== true, inventory, parts });
     for (let attempt = 1; attempt <= 3 && !result; attempt++) {
-      const res = await fetch(EXPORT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "mirrorFromSupabase", key, dry: body.apply !== true, inventory, parts }),
+      const first = await fetch(EXPORT_URL, {
+        method: "POST", redirect: "manual",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, body: payload,
       });
-      raw = await res.text();
-      try { result = JSON.parse(raw); } catch { await new Promise((r) => setTimeout(r, 2000 * attempt)); }
+      const to = first.headers.get("location");
+      const res = to ? await fetch(to) : first;
+      try {
+        const got = JSON.parse(await res.text());
+        if (got && !Array.isArray(got) && ("inventory" in got || got.ok === false)) result = got;
+      } catch { /* a page, not data */ }
+      if (!result) await new Promise((r) => setTimeout(r, 2000 * attempt));
     }
     if (!result) return json({ ok: false, error: "Google answered with a page, not data." }, 502);
     if (!result.ok) return json({ ok: false, error: result.error || "The sheet refused the copy." }, 502);

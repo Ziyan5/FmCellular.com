@@ -70,6 +70,8 @@ async function showSignedIn(session) {
   $("#me-email").textContent = me.email;
   $("#me-avatar").textContent = initials(me.name);
   $$("[data-owner-only]").forEach((el) => { el.hidden = me.role !== "owner"; });
+  // After the switch the sheet is only a copy; pouring it back is off.
+  if (me.master === "supabase") $("#sync-sheet").hidden = true;
   route();
 }
 

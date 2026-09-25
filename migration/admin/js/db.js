@@ -10,7 +10,7 @@ export const sb = configured
     })
   : null;
 
-export const me = { id: null, email: "", name: "", role: "staff" };
+export const me = { id: null, email: "", name: "", role: "staff", master: "sheet" };
 
 // An update the database refused returns no rows rather than an error, so
 // every write asks for its rows back and treats none as a refusal.
@@ -44,6 +44,8 @@ export async function loadMe(session) {
   const { data } = await sb.from("admin_users").select("role,display_name").eq("user_id", me.id).maybeSingle();
   me.role = (data && data.role) || "staff";
   me.name = (data && data.display_name) || me.email.replace(/@.*/, "");
+  const { data: setting } = await sb.from("app_settings").select("value").eq("key", "catalog_master").maybeSingle();
+  me.master = (setting && setting.value) || "sheet";
   return true;
 }
 

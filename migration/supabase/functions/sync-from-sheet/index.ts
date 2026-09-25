@@ -214,6 +214,13 @@ Deno.serve(async (request) => {
 
     const db = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 
+    // Once the website runs on Supabase, the sheet is only a copy: pouring it
+    // back over Supabase would throw away every edit made in the admin.
+    const { data: master } = await db.from("app_settings").select("value").eq("key", "catalog_master").maybeSingle();
+    if (master && master.value === "supabase") {
+      return json({ ok: false, error: "The website now runs on Supabase, so copying the Google Sheet over it is switched off. Make changes in the admin instead." }, 409);
+    }
+
     // Everything hangs off catalog_products, so clearing it clears variants,
     // stock, trade prices, images and colours with it.
     const { error: wipeError } = await db.from("catalog_products").delete().not("id", "is", null);
