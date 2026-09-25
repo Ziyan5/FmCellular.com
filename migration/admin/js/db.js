@@ -76,9 +76,28 @@ export async function listParts({ group = "all", q = "", page = 0, size = 50, fi
     words.forEach((w) => { req = req.or(`model.ilike.%${w}%,part_name.ilike.%${w}%`); });
   }
   if (filter === "hidden") req = req.eq("is_active", false);
-  const { data, count, error } = await req.order("model").order("part_name").range(page * size, page * size + size - 1);
+  if (!safe) {
+    const { data, count, error } = await req.order("model").order("part_name").range(page * size, page * size + size - 1);
+    if (error) throw new Error(error.message);
+    return { rows: data.map(summarise), count: count || 0 };
+  }
+  // A search is ranked here: whole-word matches first, so "14 pro screen"
+  // puts the iPhone 14 Pro screen above screen *pro*tectors for the A14.
+  const { data, error } = await req.order("model").limit(400);
   if (error) throw new Error(error.message);
-  return { rows: data.map(summarise), count: count || 0 };
+  const words = safe.toLowerCase().split(/\s+/).slice(0, 4);
+  const score = (p) => {
+    const m = String(p.model || "").toLowerCase(), n = String(p.part_name || "").toLowerCase();
+    let s = 0;
+    words.forEach((w) => {
+      const whole = new RegExp("(^|[^a-z0-9])" + w.replace(/[^a-z0-9]/g, "") + "($|[^a-z0-9])");
+      if (whole.test(m)) s += 3; else if (m.includes(w)) s += 1;
+      if (whole.test(n)) s += 3; else if (n.includes(w)) s += 1;
+    });
+    return s - n.length / 200;                  // "Screen" before "Screen protector"
+  };
+  const ranked = data.map((p) => ({ p, s: score(p) })).sort((a, b) => b.s - a.s).map((x) => x.p);
+  return { rows: ranked.slice(page * size, page * size + size).map(summarise), count: ranked.length };
 }
 
 function summarise(p) {
