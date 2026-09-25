@@ -7,7 +7,16 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
   });
   const $ = (selector) => document.querySelector(selector);
-  const state = { page: 0, pageSize: 40, total: 0, query: "", status: "all", editingId: null, removedVariantIds: [], removedImageIds: [] };
+  const state = {
+    page: 0,
+    pageSize: 40,
+    total: 0,
+    query: "",
+    status: "all",
+    editingId: null,
+    removedImageIds: [],
+    removedFinishIds: []
+  };
 
   const loginView = $("#login-view");
   const dashboardView = $("#dashboard-view");
@@ -45,8 +54,45 @@
       return false;
     }
     setSignedIn(session.user.email || "Admin");
-    await loadProducts();
+    await Promise.all([loadProducts(), loadStats()]);
     return true;
+  }
+
+  // Supabase answers any unranged request with at most 1,000 rows, and the
+  // catalog has close to 9,000 inventory rows - so asking for "all of them"
+  // quietly counted only the first thousand. Page through instead, and only
+  // through rows that have a quantity at all, since a blank count cannot be
+  // low. Two columns cannot be compared in a PostgREST filter, which is why
+  // the comparison still happens here.
+  async function countLowStock() {
+    const pageSize = 1000;
+    let low = 0;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await client.from("inventory_levels")
+        .select("quantity,low_stock_threshold")
+        .not("quantity", "is", null)
+        .order("variant_id")
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      low += data.filter(row => row.quantity <= row.low_stock_threshold).length;
+      if (data.length < pageSize) return low;
+    }
+  }
+
+  async function loadStats() {
+    const [products, variants, inactive] = await Promise.all([
+      client.from("catalog_products").select("*", { count: "exact", head: true }),
+      client.from("catalog_variants").select("*", { count: "exact", head: true }),
+      client.from("catalog_products").select("*", { count: "exact", head: true }).eq("is_active", false)
+    ]);
+    if (!products.error) $("#stat-products").textContent = (products.count || 0).toLocaleString();
+    if (!variants.error) $("#stat-variants").textContent = (variants.count || 0).toLocaleString();
+    if (!inactive.error) $("#stat-inactive").textContent = (inactive.count || 0).toLocaleString();
+    try {
+      $("#stat-low-stock").textContent = (await countLowStock()).toLocaleString();
+    } catch (error) {
+      $("#stat-low-stock").textContent = "—";
+    }
   }
 
   async function loadProducts() {
@@ -56,12 +102,14 @@
     let request = client.from("catalog_products")
       .select("id,item_type,category,brand,model,part_name,slug,is_active", { count: "exact" })
       .order("model", { ascending: true }).range(from, to);
+
     if (state.status === "active") request = request.eq("is_active", true);
     if (state.status === "inactive") request = request.eq("is_active", false);
     if (state.query) {
       const safe = state.query.replace(/[,%()]/g, " ").trim();
       if (safe) request = request.or(`model.ilike.%${safe}%,brand.ilike.%${safe}%,category.ilike.%${safe}%,part_name.ilike.%${safe}%`);
     }
+
     const { data, error, count } = await request;
     if (error) return message($("#dashboard-message"), error.message, "error");
     state.total = count || 0;
@@ -76,7 +124,7 @@
   function productRow(product) {
     const row = document.createElement("tr");
     const name = [product.brand, product.model, product.part_name].filter(Boolean).join(" ");
-    row.innerHTML = `<td><strong></strong><br><small></small></td><td></td><td></td><td><span class="status"></span></td><td><button class="button ghost" type="button">Edit</button></td>`;
+    row.innerHTML = '<td><strong></strong><br><small></small></td><td></td><td></td><td><span class="status"></span></td><td><button class="button ghost" type="button">Edit</button></td>';
     row.querySelector("strong").textContent = name;
     row.querySelector("small").textContent = product.slug;
     row.children[1].textContent = product.category;
@@ -88,16 +136,47 @@
     return row;
   }
 
+  function relabel(record, field, text) {
+    const input = record.querySelector(`[data-field="${field}"]`);
+    if (input && input.parentNode.firstChild.nodeType === Node.TEXT_NODE) input.parentNode.firstChild.textContent = text;
+  }
+
   function addRecord(template, container, values = {}) {
     const record = template.content.firstElementChild.cloneNode(true);
+    // Parts keep the spreadsheet's layout, which the parts page reads: the
+    // listing a customer picks sits in storage and the device family in
+    // condition. Name the boxes for what they hold rather than move the data.
+    if (record.classList.contains("variant-row") && $("#item-type").value === "part") {
+      relabel(record, "storage", "Listing (what the customer picks)");
+      relabel(record, "condition", "Fits (iPhone, Samsung, ...)");
+    }
     record.querySelectorAll("[data-field]").forEach(input => {
       const value = values[input.dataset.field];
       if (input.type === "checkbox") input.checked = Boolean(value);
       else if (value !== null && value !== undefined) input.value = value;
     });
+
     record.querySelector(".remove-record").addEventListener("click", () => {
       const id = record.querySelector('[data-field="id"]').value;
-      if (id) (record.classList.contains("variant-row") ? state.removedVariantIds : state.removedImageIds).push(id);
+      if (!id) {                       // never saved, so nothing to undo
+        record.remove();
+        return;
+      }
+      // A saved variant is switched off, not deleted. Deleting it cascades in
+      // the database and takes its stock count, wholesale price and any
+      // images tied to it along with it, with no way back. Unticking Active
+      // hides it from the shop and keeps all of that.
+      if (record.classList.contains("variant-row")) {
+        const active = record.querySelector('[data-field="is_active"]');
+        active.checked = false;
+        record.classList.add("deactivated");
+        message($("#form-message"), "Variant set to inactive. Save to hide it from the catalog - its stock and prices are kept.");
+        return;
+      }
+      const what = record.classList.contains("finish-row") ? "color/finish" : "image";
+      if (!confirm(`Remove this ${what} permanently when you save? This cannot be undone.`)) return;
+      if (record.classList.contains("finish-row")) state.removedFinishIds.push(id);
+      else state.removedImageIds.push(id);
       record.remove();
     });
     container.append(record);
@@ -107,11 +186,13 @@
     $("#product-form").reset();
     $("#product-id").value = "";
     $("#is-active").checked = true;
+    $("#slug").dataset.manual = "";
     $("#variant-list").replaceChildren();
     $("#image-list").replaceChildren();
+    $("#finish-list").replaceChildren();
     state.editingId = null;
-    state.removedVariantIds = [];
     state.removedImageIds = [];
+    state.removedFinishIds = [];
     message($("#form-message"));
   }
 
@@ -120,23 +201,54 @@
     $("#dialog-title").textContent = id ? "Edit product" : "Add product";
     $("#variant-panel").hidden = !id;
     $("#image-panel").hidden = !id;
+    $("#finish-panel").hidden = !id;
     $("#archive-product").hidden = !id;
     dialog.showModal();
+
     if (!id) return;
+
     message($("#form-message"), "Loading product…");
-    const [{ data: product, error }, variantsResult, imagesResult] = await Promise.all([
+    const [productResult, variantsResult, imagesResult, finishesResult] = await Promise.all([
       client.from("catalog_products").select("*").eq("id", id).single(),
-      client.from("catalog_variants").select("*,inventory_levels(quantity,available)").eq("product_id", id).order("sku"),
-      client.from("product_images").select("*").eq("product_id", id).order("sort_order")
+      client.from("catalog_variants")
+        .select("*,inventory_levels(quantity,available,low_stock_threshold),wholesale_prices(price,minimum_quantity)")
+        .eq("product_id", id).order("sku"),
+      client.from("product_images").select("*").eq("product_id", id).order("sort_order"),
+      client.from("product_finishes").select("*").eq("product_id", id).order("sort_order")
     ]);
-    if (error || variantsResult.error || imagesResult.error) return message($("#form-message"), (error || variantsResult.error || imagesResult.error).message, "error");
+
+    const failure = [productResult, variantsResult, imagesResult, finishesResult].find(result => result.error);
+    if (failure) return message($("#form-message"), failure.error.message, "error");
+
+    const product = productResult.data;
     state.editingId = id;
-    for (const [field, value] of Object.entries({"product-id":id,"item-type":product.item_type,category:product.category,brand:product.brand || "",model:product.model,"part-name":product.part_name || "",slug:product.slug,description:product.description || ""})) $("#" + field).value = value;
+    const fields = {
+      "product-id": id,
+      "item-type": product.item_type,
+      category: product.category,
+      brand: product.brand || "",
+      model: product.model,
+      "part-name": product.part_name || "",
+      slug: product.slug,
+      description: product.description || ""
+    };
+    for (const [field, value] of Object.entries(fields)) $("#" + field).value = value;
     $("#is-active").checked = product.is_active;
+
     for (const variant of variantsResult.data || []) {
       const inventory = Array.isArray(variant.inventory_levels) ? variant.inventory_levels[0] : variant.inventory_levels;
-      addRecord($("#variant-template"), $("#variant-list"), {...variant, quantity: inventory?.quantity, available: inventory?.available});
+      const wholesale = Array.isArray(variant.wholesale_prices) ? variant.wholesale_prices[0] : variant.wholesale_prices;
+      addRecord($("#variant-template"), $("#variant-list"), {
+        ...variant,
+        quantity: inventory?.quantity,
+        available: inventory?.available,
+        low_stock_threshold: inventory?.low_stock_threshold ?? 2,
+        wholesale_price: wholesale?.price,
+        minimum_quantity: wholesale?.minimum_quantity ?? 1
+      });
     }
+
+    for (const finish of finishesResult.data || []) addRecord($("#finish-template"), $("#finish-list"), finish);
     for (const image of imagesResult.data || []) addRecord($("#image-template"), $("#image-list"), image);
     message($("#form-message"));
   }
@@ -145,19 +257,77 @@
     const values = {};
     record.querySelectorAll("[data-field]").forEach(input => {
       let value = input.type === "checkbox" ? input.checked : input.value.trim();
-      if (["retail_price","msrp","quantity","sort_order"].includes(input.dataset.field)) value = value === "" ? null : Number(value);
+      if (["retail_price","msrp","wholesale_price","quantity","minimum_quantity","low_stock_threshold","sort_order"].includes(input.dataset.field)) {
+        value = value === "" ? null : Number(value);
+      }
       values[input.dataset.field] = value === "" ? null : value;
     });
     return values;
   }
 
+  // Everything that can be checked without the database, checked before the
+  // first write. A save is several separate requests, so a failure part-way
+  // leaves the earlier ones in place; catching the usual causes up front -
+  // a SKU used twice, the same color twice, two primary images, a negative
+  // price - means those never start a half-finished save.
+  function validateForm() {
+    const problems = [];
+    const seen = (list, label) => {
+      const counts = {}, shown = {};
+      list.filter(Boolean).forEach(v => {
+        const k = v.toLowerCase();
+        counts[k] = (counts[k] || 0) + 1;
+        if (!shown[k]) shown[k] = v;          // report it the way it was typed
+      });
+      Object.keys(counts).filter(k => counts[k] > 1).forEach(k => problems.push(`${label} "${shown[k]}" is used more than once.`));
+    };
+    const numbers = ["retail_price", "msrp", "wholesale_price", "quantity", "minimum_quantity", "low_stock_threshold", "sort_order"];
+    const records = [...$("#variant-list").children, ...$("#finish-list").children, ...$("#image-list").children];
+    for (const record of records) {
+      const values = recordValues(record);
+      for (const field of numbers) {
+        if (!(field in values) || values[field] === null) continue;
+        if (Number.isNaN(values[field])) problems.push(`"${field.replace(/_/g, " ")}" must be a number.`);
+        else if (values[field] < 0) problems.push(`"${field.replace(/_/g, " ")}" cannot be negative.`);
+      }
+    }
+    const variants = [...$("#variant-list").children].map(recordValues);
+    seen(variants.map(v => v.sku), "SKU");
+    variants.filter(v => v.minimum_quantity !== null && v.minimum_quantity < 1)
+      .forEach(v => problems.push(`Wholesale minimum for ${v.sku || "a variant"} must be at least 1.`));
+    seen([...$("#finish-list").children].map(r => recordValues(r).color), "Color");
+    const images = [...$("#image-list").children].map(recordValues);
+    seen(images.map(i => i.url), "Image URL");
+    if (images.filter(i => i.is_primary).length > 1) problems.push("Only one image can be the primary image.");
+    return [...new Set(problems)];
+  }
+
   async function saveProduct(event) {
     event.preventDefault();
+    const problems = validateForm();
+    if (problems.length) return message($("#form-message"), problems.join(" "), "error");
+
     const button = $("#save-product");
     button.disabled = true;
     message($("#form-message"), "Saving…");
+
+    // Once a new row exists in the database, its id goes back into the form.
+    // If a later step fails and the user presses Save again, that row is then
+    // updated instead of being inserted a second time.
+    const remember = (record, id) => { record.querySelector('[data-field="id"]').value = id; };
+
     try {
-      const product = {item_type:$("#item-type").value,category:$("#category").value.trim(),brand:$("#brand").value.trim() || null,model:$("#model").value.trim(),part_name:$("#part-name").value.trim() || null,slug:$("#slug").value.trim(),description:$("#description").value.trim() || null,is_active:$("#is-active").checked};
+      const product = {
+        item_type: $("#item-type").value,
+        category: $("#category").value.trim(),
+        brand: $("#brand").value.trim() || null,
+        model: $("#model").value.trim(),
+        part_name: $("#part-name").value.trim() || null,
+        slug: $("#slug").value.trim(),
+        description: $("#description").value.trim() || null,
+        is_active: $("#is-active").checked
+      };
+
       let productId = state.editingId;
       if (productId) {
         const { error } = await client.from("catalog_products").update(product).eq("id", productId);
@@ -166,58 +336,249 @@
         const { data, error } = await client.from("catalog_products").insert(product).select("id").single();
         if (error) throw error;
         productId = data.id;
+        state.editingId = productId;
+        $("#product-id").value = productId;
       }
+
       for (const record of $("#variant-list").children) {
         const values = recordValues(record);
-        const inventory = { quantity: values.quantity, available: values.available };
-        delete values.quantity; delete values.available;
-        const id = values.id; delete values.id;
+        const inventory = {
+          quantity: values.quantity,
+          available: values.available,
+          low_stock_threshold: values.low_stock_threshold ?? 2
+        };
+        const wholesalePrice = values.wholesale_price;
+        const minimumQuantity = values.minimum_quantity ?? 1;
+
+        delete values.quantity;
+        delete values.available;
+        delete values.low_stock_threshold;
+        delete values.wholesale_price;
+        delete values.minimum_quantity;
+
+        const id = values.id;
+        delete values.id;
         values.product_id = productId;
-        const result = id ? await client.from("catalog_variants").update(values).eq("id", id).select("id").single() : await client.from("catalog_variants").insert(values).select("id").single();
+
+        const result = id
+          ? await client.from("catalog_variants").update(values).eq("id", id).select("id").single()
+          : await client.from("catalog_variants").insert(values).select("id").single();
+
         if (result.error) throw result.error;
         const variantId = id || result.data.id;
-        const inventoryResult = await client.from("inventory_levels").upsert({variant_id:variantId,...inventory},{onConflict:"variant_id"});
+        if (!id) remember(record, variantId);
+
+        const inventoryResult = await client.from("inventory_levels").upsert(
+          { variant_id: variantId, ...inventory },
+          { onConflict: "variant_id" }
+        );
         if (inventoryResult.error) throw inventoryResult.error;
+
+        if (wholesalePrice === null) {
+          const wholesaleDelete = await client.from("wholesale_prices").delete().eq("variant_id", variantId);
+          if (wholesaleDelete.error) throw wholesaleDelete.error;
+        } else {
+          const wholesaleResult = await client.from("wholesale_prices").upsert(
+            { variant_id: variantId, price: wholesalePrice, minimum_quantity: minimumQuantity },
+            { onConflict: "variant_id" }
+          );
+          if (wholesaleResult.error) throw wholesaleResult.error;
+        }
       }
-      for (const record of $("#image-list").children) {
-        const values = recordValues(record); const id = values.id; delete values.id; values.product_id = productId;
-        const result = id ? await client.from("product_images").update(values).eq("id", id) : await client.from("product_images").insert(values);
+
+      for (const record of $("#finish-list").children) {
+        const values = recordValues(record);
+        const id = values.id;
+        delete values.id;
+        values.product_id = productId;
+        const result = id
+          ? await client.from("product_finishes").update(values).eq("id", id)
+          : await client.from("product_finishes").insert(values).select("id").single();
         if (result.error) throw result.error;
+        if (!id) remember(record, result.data.id);
       }
-      if (state.removedVariantIds.length) { const { error } = await client.from("catalog_variants").delete().in("id", state.removedVariantIds); if (error) throw error; }
-      if (state.removedImageIds.length) { const { error } = await client.from("product_images").delete().in("id", state.removedImageIds); if (error) throw error; }
+
+      for (const record of $("#image-list").children) {
+        const values = recordValues(record);
+        const id = values.id;
+        delete values.id;
+        values.product_id = productId;
+        const result = id
+          ? await client.from("product_images").update(values).eq("id", id)
+          : await client.from("product_images").insert(values).select("id").single();
+        if (result.error) throw result.error;
+        if (!id) remember(record, result.data.id);
+      }
+
+      // Variants are never deleted from here - see the remove button.
+      if (state.removedFinishIds.length) {
+        const { error } = await client.from("product_finishes").delete().in("id", state.removedFinishIds);
+        if (error) throw error;
+        state.removedFinishIds = [];
+      }
+      if (state.removedImageIds.length) {
+        const { error } = await client.from("product_images").delete().in("id", state.removedImageIds);
+        if (error) throw error;
+        state.removedImageIds = [];
+      }
+
       message($("#form-message"), "Saved successfully.", "success");
       setTimeout(() => dialog.close(), 450);
-      await loadProducts();
+      await Promise.all([loadProducts(), loadStats()]);
     } catch (error) {
       message($("#form-message"), error.message || "Could not save the product.", "error");
-    } finally { button.disabled = false; }
+    } finally {
+      button.disabled = false;
+    }
   }
 
   let searchTimer;
+
   $("#login-form").addEventListener("submit", async event => {
     event.preventDefault();
-    if (!client) return message($("#login-message"), "Admin configuration is missing. Copy config.example.js to config.js and add the Supabase URL and public anonymous key.", "error");
+    if (!client) {
+      return message($("#login-message"), "Admin configuration is missing. Copy config.example.js to config.js and add the Supabase URL and public anonymous key.", "error");
+    }
     message($("#login-message"), "Signing in…");
-    const { data, error } = await client.auth.signInWithPassword({email:$("#email").value.trim(),password:$("#password").value});
+    const { data, error } = await client.auth.signInWithPassword({
+      email: $("#email").value.trim(),
+      password: $("#password").value
+    });
     if (error) return message($("#login-message"), "Sign-in failed. Check the account and password.", "error");
     await requireAdmin(data.session);
   });
-  $("#sign-out").addEventListener("click", async () => { await client.auth.signOut(); setSignedOut(); });
-  $("#search").addEventListener("input", event => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.query = event.target.value.trim(); state.page = 0; loadProducts(); }, 300); });
-  $("#status-filter").addEventListener("change", event => { state.status = event.target.value; state.page = 0; loadProducts(); });
-  $("#previous-page").addEventListener("click", () => { if (state.page > 0) { state.page--; loadProducts(); } });
-  $("#next-page").addEventListener("click", () => { state.page++; loadProducts(); });
+
+  $("#sign-out").addEventListener("click", async () => {
+    await client.auth.signOut();
+    setSignedOut();
+  });
+
+  $("#forgot-password").addEventListener("click", () => {
+    $("#recovery-email").value = $("#email").value;
+    message($("#recovery-message"));
+    $("#login-form").hidden = true;
+    $("#forgot-password").hidden = true;
+    $("#recovery-request-form").hidden = false;
+  });
+
+  $("#cancel-recovery").addEventListener("click", () => {
+    $("#recovery-request-form").hidden = true;
+    $("#login-form").hidden = false;
+    $("#forgot-password").hidden = false;
+  });
+
+  $("#recovery-request-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!client) {
+      return message($("#recovery-message"), "Admin configuration is missing.", "error");
+    }
+    const button = $("#recovery-request-form").querySelector("button[type=submit]");
+    button.disabled = true;
+    await client.auth.resetPasswordForEmail($("#recovery-email").value.trim(), {
+      redirectTo: `${window.location.origin}/recovery`
+    });
+    button.disabled = false;
+    message($("#recovery-message"), "If that email has an admin account, a reset link has been sent.", "success");
+  });
+
+  $("#search").addEventListener("input", event => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.query = event.target.value.trim();
+      state.page = 0;
+      loadProducts();
+    }, 300);
+  });
+
+  $("#status-filter").addEventListener("change", event => {
+    state.status = event.target.value;
+    state.page = 0;
+    loadProducts();
+  });
+
+  $("#previous-page").addEventListener("click", () => {
+    if (state.page > 0) {
+      state.page--;
+      loadProducts();
+    }
+  });
+
+  $("#next-page").addEventListener("click", () => {
+    state.page++;
+    loadProducts();
+  });
+
   $("#new-product").addEventListener("click", () => openProduct());
+
+  // Before the switch the sheet is still where prices are typed, so the
+  // catalogue here is refreshed from it. Counts first; nothing is replaced
+  // until the second confirmation. After the switch this must not be used:
+  // it would throw away every edit made here.
+  $("#sync-sheet").addEventListener("click", async () => {
+    const out = $("#sync-message");
+    const button = $("#sync-sheet");
+    const call = body => client.functions.invoke("sync-from-sheet", { body });
+    button.disabled = true;
+    try {
+      message(out, "Reading the Google Sheet...");
+      const dry = await call({});
+      if (dry.error || !dry.data?.ok) throw new Error(dry.data?.error || dry.error?.message || "The sheet could not be read.");
+      const d = dry.data;
+      const summary = `${d.products} products, ${d.variants} variants (${d.priced} priced, ${d.wholesale} with a trade price), ${d.finishes} colours, ${d.content} pieces of wording`;
+      if (!confirm(`Replace everything here with the sheet?
+
+${summary}
+
+Edits made in this admin since the last copy will be lost.`)) {
+        message(out, "Nothing changed. The sheet has " + summary + ".");
+        return;
+      }
+      message(out, "Copying... this takes up to a minute.");
+      const run = await call({ confirm: "replace-all" });
+      if (run.error || !run.data?.ok) throw new Error(run.data?.error || run.error?.message || "The copy failed.");
+      message(out, "Copied from the sheet: " + summary + ".", "success");
+      state.page = 0;
+      await Promise.all([loadStats(), loadProducts()]);
+    } catch (error) {
+      message(out, error.message, "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
   $("#close-dialog").addEventListener("click", () => dialog.close());
   $("#cancel-dialog").addEventListener("click", () => dialog.close());
-  $("#add-variant").addEventListener("click", () => addRecord($("#variant-template"), $("#variant-list"), {is_active:true}));
-  $("#add-image").addEventListener("click", () => addRecord($("#image-template"), $("#image-list"), {sort_order:0}));
-  $("#model").addEventListener("input", () => { if (!state.editingId && !$("#slug").dataset.manual) $("#slug").value = slugify([$("#brand").value,$("#model").value,$("#part-name").value].filter(Boolean).join(" ")); });
-  $("#slug").addEventListener("input", () => { $("#slug").dataset.manual = "true"; });
-  $("#archive-product").addEventListener("click", async () => { if (!state.editingId || !confirm("Deactivate this product? It will disappear from the public catalog.")) return; const { error } = await client.from("catalog_products").update({is_active:false}).eq("id",state.editingId); if (error) return message($("#form-message"),error.message,"error"); dialog.close(); await loadProducts(); });
+  $("#add-variant").addEventListener("click", () => addRecord($("#variant-template"), $("#variant-list"), {
+    is_active: true,
+    available: true,
+    minimum_quantity: 1,
+    low_stock_threshold: 2
+  }));
+  $("#add-finish").addEventListener("click", () => addRecord($("#finish-template"), $("#finish-list"), {
+    sort_order: 0,
+    is_hidden: false
+  }));
+  $("#add-image").addEventListener("click", () => addRecord($("#image-template"), $("#image-list"), { sort_order: 0 }));
+
+  $("#model").addEventListener("input", () => {
+    if (!state.editingId && !$("#slug").dataset.manual) {
+      $("#slug").value = slugify([$("#brand").value, $("#model").value, $("#part-name").value].filter(Boolean).join(" "));
+    }
+  });
+
+  $("#slug").addEventListener("input", () => {
+    $("#slug").dataset.manual = "true";
+  });
+
+  $("#archive-product").addEventListener("click", async () => {
+    if (!state.editingId || !confirm("Deactivate this product? It will disappear from the public catalog.")) return;
+    const { error } = await client.from("catalog_products").update({ is_active: false }).eq("id", state.editingId);
+    if (error) return message($("#form-message"), error.message, "error");
+    dialog.close();
+    await Promise.all([loadProducts(), loadStats()]);
+  });
+
   $("#product-form").addEventListener("submit", saveProduct);
 
   if (missingConfig) setSignedOut("Admin configuration has not been added yet.");
-  else client.auth.getSession().then(({data}) => requireAdmin(data.session));
+  else client.auth.getSession().then(({ data }) => requireAdmin(data.session));
 })();
