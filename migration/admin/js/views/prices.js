@@ -135,7 +135,7 @@ export async function renderPrices() {
     if (!slice.length) { box.innerHTML = '<div class="empty">Nothing matches “' + esc(state.q) + "”.</div>"; return; }
 
     const grades = kind === "parts" ? ["_"] : GRADES;
-    const sub = shown.map(([k, t]) => '<th class="k-' + k + '">' + t + "</th>").join("");
+    const sub = shown.map(([k, t]) => '<th class="k-' + k + '">' + t.replace(" ", "<br>") + "</th>").join("");
     const head = kind === "parts"
       ? '<tr><th class="c-model">Model</th><th class="c-sub">Part</th>' + sub + "</tr>"
       : '<tr class="h1"><th class="c-model" rowspan="2">Model</th><th class="c-sub" rowspan="2">Storage</th>' +

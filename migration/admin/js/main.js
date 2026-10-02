@@ -42,6 +42,7 @@ async function route() {
     if (!m) continue;
     $$(".side-nav a").forEach((a) => a.classList.toggle("on", a.dataset.nav === (nav || sessionStorage.getItem("fm.lastList") || "devices")));
     if (nav === "devices" || nav === "parts") sessionStorage.setItem("fm.lastList", nav);
+    $("#view").classList.toggle("wide", nav === "prices");
     $("#view").innerHTML = '<div class="skeleton" style="height:160px"></div>';
     try { await fn(m); } catch (err) {
       console.error(err);

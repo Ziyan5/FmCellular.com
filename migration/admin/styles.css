@@ -210,10 +210,11 @@ table.list{width:100%;border-collapse:separate;border-spacing:0}
 .psheet{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums}
 .psheet th,.psheet td{padding:0;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
 .psheet thead th{position:sticky;top:0;z-index:3;padding:9px 10px;font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right}
-.psheet thead .h2 th{top:35px}
+.psheet thead .h2 th{top:35px;line-height:1.25;padding:7px 10px}
+#view.wide{max-width:1680px}
 .psheet thead th.grade{text-align:center;font-size:.86rem;letter-spacing:.02em;text-transform:none;color:var(--ink);background:var(--sunk);height:35px}
 .psheet thead th.c-model,.psheet thead th.c-sub{text-align:left;z-index:5}
-.psheet .c-model{position:sticky;left:0;z-index:2;text-align:left;padding:8px 12px;min-width:190px;max-width:260px;overflow:hidden;text-overflow:ellipsis;font-weight:750;box-shadow:1px 0 0 var(--line)}
+.psheet .c-model{position:sticky;left:0;z-index:2;text-align:left;padding:8px 12px;min-width:170px;max-width:260px;overflow:hidden;text-overflow:ellipsis;font-weight:750;box-shadow:1px 0 0 var(--line)}
 .psheet .c-model a{color:var(--ink);text-decoration:none}
 .psheet .c-model a:hover{color:var(--accent-2);text-decoration:underline}
 .psheet .c-model .ditto{color:transparent;user-select:none}
@@ -225,7 +226,7 @@ table.list{width:100%;border-collapse:separate;border-spacing:0}
 .psheet tr.hid .c-model a,.psheet tr.hid .c-sub{color:var(--faint)}
 .psheet thead th.k-trade{color:var(--accent-2)}
 .psheet thead th.k-purchase{color:#a86a08}
-.psheet td.pc{min-width:92px}
+.psheet td.pc{min-width:84px}
 .psheet td.pc input,.psheet td.pc span{display:block;width:100%;padding:8px 10px;border:1px solid transparent;border-radius:0;background:transparent;text-align:right;font-weight:650;box-shadow:none}
 .psheet td.pc input:hover{border-color:var(--line-2)}
 .psheet td.pc input:focus{border-color:var(--accent);background:var(--surface);box-shadow:inset 0 0 0 1px var(--accent)}
