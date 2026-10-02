@@ -5,7 +5,7 @@
   const missingConfig = !config.supabaseUrl || !config.supabaseAnonKey || config.supabaseUrl.includes("YOUR_PROJECT");
   // detectSessionInUrl must be true here (unlike the main admin client) so this page can
   // exchange the recovery link's token for a session.
-  const client = missingConfig ? null : window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+  const client = missingConfig || !window.supabase ? null : window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
 
@@ -19,18 +19,22 @@
   }
 
   function showForm() {
-    intro.textContent = "Choose a new password for your admin account.";
+    intro.textContent = "Choose the password you will sign in with.";
     form.hidden = false;
   }
 
   async function init() {
     if (!client) {
-      intro.textContent = "Admin configuration is missing.";
+      intro.textContent = "This page did not load fully. Check the internet connection and open the link from your email again.";
       return;
     }
+    // The email link says why it failed, when it did (used already, or too old).
+    const said = new URLSearchParams(location.hash.replace(/^#/, "")).get("error_description") ||
+                 new URLSearchParams(location.search).get("error_description");
     const { data } = await client.auth.getSession();
     if (data.session) showForm();
-    else intro.textContent = "This recovery link is invalid or has expired. Request a new one from the sign-in page.";
+    else intro.textContent = (said ? said.replace(/\+/g, " ") + ". " : "This link has already been used or is too old. ") +
+      "Ask for a new one: press “Forgot your password?” on the sign-in page, or ask the owner to invite you again.";
   }
 
   client?.auth.onAuthStateChange((event) => {
@@ -53,7 +57,7 @@
     button.disabled = false;
     if (error) return message(formMessage, error.message, "error");
 
-    message(formMessage, "Password updated. Redirecting to sign in…", "success");
+    message(formMessage, "Password saved. Taking you to sign in…", "success");
     await client.auth.signOut();
     setTimeout(() => { window.location.href = "/"; }, 1500);
   });
