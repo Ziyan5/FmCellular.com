@@ -56,6 +56,8 @@ create table public.catalog_variants (
   color text,
   retail_price numeric(12,2) check (retail_price is null or retail_price >= 0),
   msrp numeric(12,2) check (msrp is null or msrp >= 0),
+  in_stock boolean not null default false, -- kept in step with inventory_levels by 002
+  sort_order integer,                      -- the sheet's order; null (added later) sorts first
   is_active boolean not null default true,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -154,8 +156,6 @@ create policy "Public reads active products" on public.catalog_products
 for select using (is_active);
 create policy "Public reads active variants" on public.catalog_variants
 for select using (is_active);
-create policy "Public reads inventory availability" on public.inventory_levels
-for select using (true);
 create policy "Public reads product images" on public.product_images
 for select using (true);
 create policy "Public reads visible finishes" on public.product_finishes
