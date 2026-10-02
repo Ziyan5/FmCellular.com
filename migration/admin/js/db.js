@@ -10,7 +10,7 @@ export const sb = configured
     })
   : null;
 
-export const me = { id: null, email: "", name: "", role: "staff", master: "sheet" };
+export const me = { id: null, email: "", name: "", role: "staff", master: "sheet", seePurchase: false };
 
 // An update the database refused returns no rows rather than an error, so
 // every write asks for its rows back and treats none as a refusal.
@@ -44,9 +44,16 @@ export async function loadMe(session) {
   const { data } = await sb.from("admin_users").select("role,display_name").eq("user_id", me.id).maybeSingle();
   me.role = (data && data.role) || "staff";
   me.name = (data && data.display_name) || me.email.replace(/@.*/, "");
-  const { data: setting } = await sb.from("app_settings").select("value").eq("key", "catalog_master").maybeSingle();
-  me.master = (setting && setting.value) || "sheet";
+  const { data: settings } = await sb.from("app_settings").select("key,value").in("key", ["catalog_master", "staff_see_purchase"]);
+  const setting = (k) => ((settings || []).find((s) => s.key === k) || {}).value;
+  me.master = setting("catalog_master") || "sheet";
+  // What the shop paid is the owner's; staff see it only if the owner says so.
+  me.seePurchase = me.role === "owner" || setting("staff_see_purchase") === "yes";
   return true;
+}
+
+export async function setSetting(key, value) {
+  wrote(await sb.from("app_settings").upsert({ key, value }, { onConflict: "key" }).select("key"));
 }
 
 export async function log(action, target, detail = {}) {
@@ -203,6 +210,68 @@ export async function saveProduct(productId, { product, options, newOptions, fin
     check(await sb.from("product_images").delete().eq("product_id", productId).is("variant_id", null));
     const rows = images.map((url, i) => ({ product_id: productId, url, sort_order: i, is_primary: i === 0 }));
     if (rows.length) wrote(await sb.from("product_images").upsert(rows, { onConflict: "product_id,url" }).select("id"));
+  }
+}
+
+/* ---------------- price sheet ---------------- */
+
+// Every listing with its three prices, for the price sheet. Pages are asked
+// for side by side, so nine thousand parts arrive in about a second.
+export async function priceRows(kind) {
+  const build = () => {
+    const q = sb.from("catalog_variants")
+      .select("id,product_id,storage,condition,retail_price,msrp,is_active,sort_order," +
+        "catalog_products!inner(id,item_type,category,brand,model,part_name,is_active)," +
+        "wholesale_prices(price)" + (me.seePurchase ? ",purchase_prices(price)" : ""), { count: "exact" });
+    return (kind === "parts" ? q.eq("catalog_products.item_type", "part") : q.in("catalog_products.item_type", ["device", "accessory"]))
+      .order("sort_order", { ascending: true, nullsFirst: false }).order("id");
+  };
+  const first = await build().range(0, 999);
+  if (first.error) throw new Error(first.error.message);
+  const rest = [];
+  for (let from = 1000; from < (first.count || 0); from += 1000) rest.push(build().range(from, from + 999));
+  const more = await Promise.all(rest);
+  const out = [...first.data];
+  more.forEach((r) => { if (r.error) throw new Error(r.error.message); out.push(...r.data); });
+  const one = (x) => (Array.isArray(x) ? x[0] : x);
+  return out.map((v) => {
+    const p = v.catalog_products, ws = one(v.wholesale_prices), pp = one(v.purchase_prices);
+    return {
+      id: v.id, productId: v.product_id, storage: v.storage || "", condition: v.condition || "",
+      price: v.retail_price, trade: ws ? ws.price : null, purchase: pp ? pp.price : null,
+      msrp: v.msrp, active: v.is_active, order: v.sort_order,
+      category: p.category, brand: p.brand, model: p.model, part: p.part_name || "", productActive: p.is_active
+    };
+  });
+}
+
+async function pool(items, size, fn) {
+  let at = 0;
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (at < items.length) await fn(items[at++]);
+  }));
+}
+const chunks = (list, n) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
+
+// Saves the price sheet. Each list holds { id, price }; a null price clears
+// it. `create` adds a grade a model did not have yet.
+export async function savePrices({ retail = [], trade = [], purchase = [], create = [] }) {
+  await pool(retail, 8, async (r) => wrote(await sb.from("catalog_variants").update({ retail_price: r.price }).eq("id", r.id).select("id")));
+  for (const [table, list] of [["wholesale_prices", trade], ["purchase_prices", purchase]]) {
+    const set = list.filter((x) => x.price !== null).map((x) => ({ variant_id: x.id, price: x.price }));
+    const clear = list.filter((x) => x.price === null).map((x) => x.id);
+    for (const part of chunks(set, 500)) wrote(await sb.from(table).upsert(part, { onConflict: "variant_id" }).select("variant_id"));
+    for (const part of chunks(clear, 100)) check(await sb.from(table).delete().in("variant_id", part));
+  }
+  for (const n of create) {
+    const sku = "FMC-" + crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase();
+    const row = check(await sb.from("catalog_variants").insert({
+      product_id: n.productId, sku, storage: n.storage || null, condition: n.condition || null,
+      retail_price: n.price, msrp: n.msrp ?? null, sort_order: n.order ?? null, is_active: true
+    }).select("id").single());
+    check(await sb.from("inventory_levels").upsert({ variant_id: row.id, quantity: null, available: true }, { onConflict: "variant_id" }));
+    if (n.trade !== null) check(await sb.from("wholesale_prices").insert({ variant_id: row.id, price: n.trade }));
+    if (n.purchase !== null) check(await sb.from("purchase_prices").insert({ variant_id: row.id, price: n.purchase }));
   }
 }
 

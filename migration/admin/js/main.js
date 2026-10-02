@@ -5,6 +5,7 @@ import { $, $$, esc, toast, initials, debounce, modal, photoSrc } from "./ui.js"
 import { renderHome } from "./views/home.js";
 import { renderDevices, renderParts } from "./views/products.js";
 import { renderProduct } from "./views/product.js";
+import { renderPrices } from "./views/prices.js";
 import { renderPosters } from "./views/posters.js";
 import { renderActivity } from "./views/activity.js";
 import { renderTeam } from "./views/team.js";
@@ -21,6 +22,7 @@ const routes = [
   [/^#\/devices(?:\?(.*))?$/, "devices", (m) => renderDevices(new URLSearchParams(m[1] || ""))],
   [/^#\/parts(?:\?(.*))?$/, "parts", (m) => renderParts(new URLSearchParams(m[1] || ""))],
   [/^#\/product\/([0-9a-f-]{36})$/, null, (m) => renderProduct(m[1])],
+  [/^#\/prices$/, "prices", () => renderPrices()],
   [/^#\/posters$/, "posters", () => renderPosters()],
   [/^#\/activity$/, "activity", () => renderActivity()],
   [/^#\/team$/, "team", () => renderTeam()]

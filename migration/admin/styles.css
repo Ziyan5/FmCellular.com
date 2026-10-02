@@ -196,6 +196,53 @@ table.list{width:100%;border-collapse:separate;border-spacing:0}
 .bulkbar .btn.ghost{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#fff}
 .bulkbar .btn.ghost:hover{background:rgba(255,255,255,.2)}
 
+/* price sheet: one scrolling box, headings and the model column stay put */
+.ps-head-tools{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ps-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.88rem}
+.ps-key{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line-2);background:var(--surface);padding:6px 12px;border-radius:99px;font-weight:700;font-size:.86rem;cursor:pointer;color:var(--muted)}
+.ps-key i{width:11px;height:11px;border-radius:3px;background:var(--line-2)}
+.ps-key.on{color:var(--ink);border-color:var(--ink-2)}
+.ps-key.on.k-price i{background:var(--navy)}
+.ps-key.on.k-trade i{background:var(--accent)}
+.ps-key.on.k-purchase i{background:#d9911a}
+.ps-card{overflow:hidden}
+.ps-box{max-height:calc(100vh - 292px);min-height:320px;overflow:auto;overscroll-behavior:contain}
+.psheet{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums}
+.psheet th,.psheet td{padding:0;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+.psheet thead th{position:sticky;top:0;z-index:3;padding:9px 10px;font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right}
+.psheet thead .h2 th{top:35px}
+.psheet thead th.grade{text-align:center;font-size:.86rem;letter-spacing:.02em;text-transform:none;color:var(--ink);background:var(--sunk);height:35px}
+.psheet thead th.c-model,.psheet thead th.c-sub{text-align:left;z-index:5}
+.psheet .c-model{position:sticky;left:0;z-index:2;text-align:left;padding:8px 12px;min-width:190px;max-width:260px;overflow:hidden;text-overflow:ellipsis;font-weight:750;box-shadow:1px 0 0 var(--line)}
+.psheet .c-model a{color:var(--ink);text-decoration:none}
+.psheet .c-model a:hover{color:var(--accent-2);text-decoration:underline}
+.psheet .c-model .ditto{color:transparent;user-select:none}
+.psheet .c-sub{padding:8px 12px;color:var(--ink-2);font-weight:650}
+.psheet.flat .c-sub{white-space:normal;min-width:240px;font-weight:500}
+.psheet .g-start{border-left:1px solid var(--line-2)}
+.psheet tbody tr.first>*{border-top:2px solid var(--line-2)}
+.psheet tbody tr:hover>*{background:#f8faff}
+.psheet tr.hid .c-model a,.psheet tr.hid .c-sub{color:var(--faint)}
+.psheet thead th.k-trade{color:var(--accent-2)}
+.psheet thead th.k-purchase{color:#a86a08}
+.psheet td.pc{min-width:92px}
+.psheet td.pc input,.psheet td.pc span{display:block;width:100%;padding:8px 10px;border:1px solid transparent;border-radius:0;background:transparent;text-align:right;font-weight:650;box-shadow:none}
+.psheet td.pc input:hover{border-color:var(--line-2)}
+.psheet td.pc input:focus{border-color:var(--accent);background:var(--surface);box-shadow:inset 0 0 0 1px var(--accent)}
+.psheet td.k-price input,.psheet td.k-price span{color:var(--ink)}
+.psheet td.k-trade,.psheet tbody tr:hover td.k-trade{background:#f4faff}
+.psheet td.k-trade input,.psheet td.k-trade span{color:var(--accent-2)}
+.psheet td.k-purchase,.psheet tbody tr:hover td.k-purchase{background:#fffaf0}
+.psheet td.k-purchase input,.psheet td.k-purchase span{color:#8f5a06}
+.psheet td.pc.off input,.psheet td.pc.off span{opacity:.45}
+.psheet td.pc.changed,.psheet tbody tr:hover td.pc.changed{background:var(--changed);box-shadow:inset 0 0 0 1px var(--changed-line)}
+.psheet td.pc.bad,.psheet tbody tr:hover td.pc.bad{background:var(--bad-soft);box-shadow:inset 0 0 0 1px var(--bad)}
+@media (max-width:860px){
+  .ps-box{max-height:calc(100vh - 250px)}
+  .psheet .c-model{min-width:128px;max-width:150px;white-space:normal;font-size:.86rem}
+  .psheet td.pc{min-width:80px}
+}
+
 /* colours */
 .finishes{display:grid;gap:12px}
 .finish{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:start;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface);transition:box-shadow .15s,border-color .15s,background .15s}

@@ -23,7 +23,8 @@ export async function renderHome() {
     '<a class="card tile good" href="#/posters"><span>Posters live</span><strong class="num">' + n(s.posters) + "</strong><em>on the parts page</em></a>";
 
   $("#todo").innerHTML = [
-    ["#/devices", "Update phone prices", "Open a phone, type the new prices into its table, press Save."],
+    ["#/prices", "See or change any price", "The price sheet lists every phone by grade — retail, wholesale and purchase price side by side."],
+    ["#/devices", "Update one phone", "Open a phone, type the new prices and stock into its table, press Save."],
     ["#/parts", "Update a part", "Search for the model — like “14 Pro screen” — then change price, trade price or stock."],
     ["#/devices", "Change photos", "Open a phone and drag pictures onto a colour. Drag to reorder; the first one is the main photo."],
     ["#/posters", "Swap a poster", "Drag a finished poster picture into Posters, or switch one off to take it down."]
