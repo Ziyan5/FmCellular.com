@@ -4,11 +4,50 @@
 
 const config = window.FM_ADMIN_CONFIG || {};
 export const configured = !!(config.supabaseUrl && config.supabaseAnonKey && !config.supabaseUrl.includes("YOUR_PROJECT"));
-export const sb = configured
+
+// A dropped connection or a brief hiccup at the server should not show as an
+// error. Reads are simply asked again (twice, a moment apart). A save is never
+// repeated by itself - it might have gone through - but says plainly what
+// happened instead of "Failed to fetch".
+async function steadyFetch(input, init = {}) {
+  const method = String(init.method || "GET").toUpperCase();
+  const read = method === "GET" || method === "HEAD";
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(input, init);
+      if (read && res.status >= 502 && res.status <= 504 && attempt < 2) { await new Promise((r) => setTimeout(r, 700 * (attempt + 1))); continue; }
+      return res;
+    } catch (err) {
+      if (err && err.name === "AbortError") throw err;
+      if (read && attempt < 2) { await new Promise((r) => setTimeout(r, 700 * (attempt + 1))); continue; }
+      throw new Error(navigator.onLine === false
+        ? "You are offline. Check the internet connection, then try again."
+        : "Could not reach the server. Check the internet connection, then try again.");
+    }
+  }
+}
+
+export const sb = configured && window.supabase
   ? window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+      global: { fetch: steadyFetch }
     })
   : null;
+
+// Every error someone is shown is noted (admin_errors), so it can be looked
+// up afterwards. Never throws, never loops: a failure to note is dropped.
+let lastNoted = "";
+export function reportError(message, detail = {}) {
+  try {
+    const text = String(message || "").slice(0, 500);
+    if (!sb || !me.id || !text || text === lastNoted) return;
+    lastNoted = text;
+    sb.from("admin_errors").insert({
+      actor: me.id, actor_email: me.email, page: location.hash || "#/", message: text,
+      detail: { ...detail, agent: navigator.userAgent, online: navigator.onLine, at: new Date().toISOString() }
+    }).then(() => {}, () => {});
+  } catch (e) { /* noting an error must never cause one */ }
+}
 
 export const me = { id: null, email: "", name: "", role: "staff", master: "sheet", seePurchase: false };
 
@@ -40,7 +79,10 @@ export async function loadMe(session) {
   me.id = session.user.id;
   me.email = session.user.email || "";
   const { data: ok, error } = await sb.rpc("is_admin");
-  if (error || ok !== true) return false;
+  // Not being able to ask is not the same as being told no: someone with a
+  // bad connection must not be signed out and told they have no access.
+  if (error) throw new Error(error.message || "Could not check your access.");
+  if (ok !== true) return false;
   const { data } = await sb.from("admin_users").select("role,display_name").eq("user_id", me.id).maybeSingle();
   me.role = (data && data.role) || "staff";
   me.name = (data && data.display_name) || me.email.replace(/@.*/, "");

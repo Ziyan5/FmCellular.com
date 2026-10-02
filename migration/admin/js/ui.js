@@ -1,5 +1,7 @@
 // Small shared helpers: escaping, formatting, toasts, confirm boxes.
 
+import { reportError } from "./db.js";
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -51,8 +53,11 @@ export function toast(text, kind = "") {
   box.className = "toast " + kind;
   box.textContent = text;
   $("#toasts").appendChild(box);
-  setTimeout(() => { box.style.opacity = "0"; box.style.transition = "opacity .3s"; }, 3200);
-  setTimeout(() => box.remove(), 3600);
+  // An error stays long enough to read, and is noted so it can be looked up.
+  const stay = kind === "bad" ? 9000 : 3200;
+  if (kind === "bad") { reportError(text, { shown: "toast" }); box.title = "Click to dismiss"; box.style.cursor = "pointer"; box.onclick = () => box.remove(); }
+  setTimeout(() => { box.style.opacity = "0"; box.style.transition = "opacity .3s"; }, stay);
+  setTimeout(() => box.remove(), stay + 400);
 }
 
 // A modal with its own buttons. Resolves with the value of the button
@@ -88,6 +93,7 @@ export function modal({ title, html = "", ok = "OK", cancel = "Cancel", danger =
       } catch (err) {
         msg.textContent = err.message || String(err);
         msg.className = "message error";
+        reportError(msg.textContent, { shown: "box", title });
       }
     });
     setTimeout(() => (body.querySelector("input,select,textarea") || back.querySelector("[data-act=ok]")).focus(), 30);

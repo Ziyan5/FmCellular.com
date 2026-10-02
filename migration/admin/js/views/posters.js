@@ -72,7 +72,7 @@ export async function renderPosters() {
       return;
     }
     const ed = e.target.closest("[data-edit]");
-    if (ed) editPoster(posters.find((x) => x.id === ed.dataset.edit));
+    if (ed) editPoster(posters.find((x) => x.id === ed.dataset.edit)).catch((err) => toast("Could not save the poster: " + err.message, "bad"));
   });
   $("#new-poster").addEventListener("click", async () => { const f = await pickFiles({ multiple: false }); if (f.length) newPoster(f[0]); });
   acceptFiles(box, (files) => newPoster(files[0]), "file-over-page");

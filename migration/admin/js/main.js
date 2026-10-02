@@ -1,6 +1,6 @@
 // Start-up: sign-in, the frame around every page, search, and page switching.
 
-import { sb, configured, me, loadMe, search } from "./db.js";
+import { sb, configured, me, loadMe, search, reportError } from "./db.js";
 import { $, $$, esc, toast, initials, debounce, modal, photoSrc } from "./ui.js";
 import { renderHome } from "./views/home.js";
 import { renderDevices, renderParts } from "./views/products.js";
@@ -46,7 +46,11 @@ async function route() {
     $("#view").innerHTML = '<div class="skeleton" style="height:160px"></div>';
     try { await fn(m); } catch (err) {
       console.error(err);
-      $("#view").innerHTML = '<div class="card card-body"><h2>Something went wrong</h2><p class="muted">' + esc(err.message || err) + '</p><button class="btn ghost" onclick="location.reload()">Reload</button></div>';
+      reportError(err.message || String(err), { shown: "page", stack: String(err.stack || "").slice(0, 900) });
+      $("#view").innerHTML = '<div class="card card-body"><h2>This page did not load</h2><p class="muted">' + esc(err.message || err) +
+        '</p><p class="muted">Nothing was changed. Try again — the error has been noted so it can be looked into.</p>' +
+        '<button class="btn primary" id="retry-route" type="button">Try again</button></div>';
+      $("#retry-route").onclick = () => route();
     }
     $("#view").focus({ preventScroll: true });
     window.scrollTo(0, 0);
@@ -57,13 +61,25 @@ async function route() {
 window.addEventListener("hashchange", route);
 
 /* ---------- sign in ---------- */
+let leaving = false;
 function showSignedOut(text) {
   $("#app").hidden = true;
   $("#login-view").hidden = false;
   if (text) { $("#login-message").textContent = text; $("#login-message").className = "message error"; }
 }
 async function showSignedIn(session) {
-  if (!(await loadMe(session))) {
+  let allowed;
+  try { allowed = await loadMe(session); }
+  catch (err) {
+    // Could not ask (connection, or the server was briefly busy): stay signed
+    // in and offer to try again, rather than throwing the person out.
+    $("#login-view").hidden = true;
+    $("#app").hidden = false;
+    $("#view").innerHTML = '<div class="card card-body"><h2>Could not load the admin</h2><p class="muted">' + esc(err.message || err) +
+      '</p><button class="btn primary" onclick="location.reload()">Try again</button></div>';
+    return;
+  }
+  if (!allowed) {
     await sb.auth.signOut();
     return showSignedOut("This account does not have FM Cellular admin access.");
   }
@@ -105,6 +121,7 @@ $("#recovery-request-form").addEventListener("submit", async (e) => {
 $("#sign-out").addEventListener("click", async () => {
   if (leaveCheck && leaveCheck() && !(await modal({ title: "Sign out without saving?", html: '<p class="muted" style="margin:0">Your unsaved changes will be lost.</p>', ok: "Sign out", danger: true }))) return;
   leaveCheck = null;
+  leaving = true;
   await sb.auth.signOut();
   location.hash = "";
   showSignedOut();
@@ -189,13 +206,36 @@ $("#sync-sheet").addEventListener("click", async () => {
   finally { btn.disabled = false; }
 });
 
+/* ---------- anything unexpected ----------
+   A click whose work fails somewhere nobody was waiting for it would
+   otherwise do nothing at all. Say so, and note it. */
+window.addEventListener("unhandledrejection", (e) => {
+  const text = (e.reason && e.reason.message) || String(e.reason || "");
+  if (!text || /AbortError|ResizeObserver/.test(text)) return;
+  toast(text, "bad");
+});
+window.addEventListener("error", (e) => {
+  if (!e.message || /ResizeObserver|Script error/.test(e.message)) return;
+  reportError(e.message, { shown: "none", file: String(e.filename || "").split("/").slice(-2).join("/"), line: e.lineno });
+});
+
 /* ---------- go ---------- */
+window.__fmStarted = true;
+try { sessionStorage.removeItem("fm.healed"); } catch (e) {}
+if ($("#fm-stuck")) $("#fm-stuck").remove();
 (async () => {
   if (!configured) return showSignedOut("The admin is missing its settings (config.js).");
+  if (!sb) return showSignedOut("Part of the admin did not load. Check the internet connection and reload the page.");
   const { data } = await sb.auth.getSession();
   if (data.session) showSignedIn(data.session);
   else showSignedOut();
-  sb.auth.onAuthStateChange((event) => { if (event === "SIGNED_OUT") showSignedOut(); });
+  // Signed out by time rather than by the button: say so, instead of the
+  // sign-in page appearing from nowhere.
+  sb.auth.onAuthStateChange((event) => {
+    if (event !== "SIGNED_OUT") return;
+    showSignedOut(leaving ? "" : "You were signed out after a while away. Sign in again to carry on.");
+    leaving = false;
+  });
 })();
 
 export { photoSrc };

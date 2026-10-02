@@ -74,8 +74,41 @@
        colours and pictures a shopper does. Public files from the live site. -->
   <script src="https://www.fmcellular.com/catalog-maps.js"></script>
   <script src="https://www.fmcellular.com/photo-library.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- One fixed version, so an update at the library's end can never change
+       how the admin behaves; and a second place to get it from if the first
+       is down. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+  <script>window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"><\/script>');</script>
   <script src="config.js"></script>
+  <!-- The admin is several files. Just after an update a browser can hold a
+       mix of old and new ones and fail to start: fetch them all fresh once
+       and reload, instead of leaving a blank page. -->
+  <script>
+    (function () {
+      var FILES = ["index.html", "styles.css", "config.js", "js/main.js", "js/db.js", "js/ui.js", "js/mirror.js", "js/photos.js",
+        "js/views/home.js", "js/views/products.js", "js/views/product.js", "js/views/prices.js", "js/views/posters.js",
+        "js/views/activity.js", "js/views/team.js"];
+      function heal() {
+        if (window.__fmStarted || window.__fmHealing) return;
+        window.__fmHealing = true;
+        var again = false;
+        try { again = sessionStorage.getItem("fm.healed") === "1"; sessionStorage.setItem("fm.healed", "1"); } catch (e) {}
+        if (again) {
+          document.body.insertAdjacentHTML("beforeend", '<div id="fm-stuck" style="position:fixed;inset:0;display:grid;place-items:center;background:#f3f5fa;font:16px system-ui;padding:24px;text-align:center;z-index:999"><div><b>The admin could not start.</b><p>Check the internet connection, then <a href="javascript:location.reload()">reload the page</a>.</p></div></div>');
+          return;
+        }
+        Promise.all(FILES.map(function (f) { return fetch(f, { cache: "reload" }).catch(function () {}); }))
+          .then(function () { if (!window.__fmStarted) location.reload(); });
+      }
+      window.addEventListener("error", function (e) {
+        var t = e.target;
+        var ownFile = t && t.tagName === "SCRIPT" && String(t.src || "").indexOf(location.origin) === 0;
+        var ownCode = e.message && String(e.filename || "").indexOf(location.origin) === 0;
+        if (ownFile || ownCode) heal();
+      }, true);
+      setTimeout(heal, 20000);
+    })();
+  </script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
