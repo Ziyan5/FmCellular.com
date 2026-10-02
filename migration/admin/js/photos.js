@@ -56,9 +56,11 @@ export function cardPhoto(model, saved) {
 
 /* ---------- making an upload match the shop ---------- */
 // The same steps every photo on the site went through: find the plain
-// background, cut it away, trim to the product, fit it to a 560px square.
+// background, cut it away, trim to the product, fit it to a square. 1200px,
+// so an uploaded photo is as sharp on a product page as the shop's own (a
+// small picture is never enlarged past its own size).
 
-const CANVAS = 560, FILL = 0.9, WORK_MAX = 1400;
+const CANVAS_MAX = 1200, FILL = 0.9, WORK_MAX = 2000;
 
 function loadImage(file) {
   return new Promise((resolve, reject) => {
@@ -139,6 +141,7 @@ function cutOut(img) {
 export async function preparePhoto(file, { cut = true } = {}) {
   const img = await loadImage(file);
   const out = document.createElement("canvas");
+  const CANVAS = Math.max(560, Math.min(CANVAS_MAX, Math.round(Math.max(img.width, img.height) / FILL)));
   out.width = CANVAS; out.height = CANVAS;
   const ox = out.getContext("2d");
   ox.imageSmoothingEnabled = true; ox.imageSmoothingQuality = "high";
